@@ -2,7 +2,7 @@ name: bifrost
 
 services:
   bifrost:
-    image: maximhq/bifrost:v1.6.3
+    image: maximhq/bifrost:v1.6.5
     restart: unless-stopped
     environment:
       APP_HOST: 0.0.0.0

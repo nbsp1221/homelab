@@ -2,7 +2,7 @@
 
 n8n stack for this repository.
 
-This directory is the canonical n8n deployment definition for `self-hosted/`.
+This directory is the canonical n8n deployment definition for this repository.
 It runs n8n in regular mode behind an external reverse proxy and keeps supporting services private on an internal Docker network.
 
 ## What This Stack Contains
@@ -102,7 +102,7 @@ If the workflow estate becomes more controlled later, that setting should be rev
 ## Migration Note
 
 Migration from the old standalone n8n repository is a separate manual process.
-This stack definition only describes the canonical target deployment in `self-hosted/`.
+This stack definition only describes the canonical target deployment in this repository.
 
 ## Operations
 

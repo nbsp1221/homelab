@@ -1,18 +1,26 @@
-# self-hosted
+# 🏠 Homelab
 
-🐳 Personal self-hosted infrastructure managed with Docker
+Personal homelab infrastructure and self-hosted services managed as code
 
-This repo is a collection of small, mostly independent Docker Compose stacks.
-Each service lives in its own directory and can be started on its own.
+This repository currently contains a collection of small, mostly independent
+Docker Compose stacks. Each service lives in its own directory and can be
+started on its own.
+
+As the homelab grows, this repository may also include host, network, storage,
+provisioning, and cluster configuration.
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Services](#services)
-- [Reverse Proxy](#reverse-proxy)
-- [Data and Secrets](#data-and-secrets)
-- [License](#license)
+- [🏠 Homelab](#-homelab)
+  - [Table of Contents](#table-of-contents)
+  - [Prerequisites](#prerequisites)
+  - [Quick Start](#quick-start)
+  - [Services](#services)
+    - [Maintained Services](#maintained-services)
+    - [Legacy Services](#legacy-services)
+  - [Reverse Proxy](#reverse-proxy)
+  - [Data and Secrets](#data-and-secrets)
+  - [License](#license)
 
 ## Prerequisites
 
@@ -55,21 +63,26 @@ docker compose down
 
 ## Services
 
-| Service | Path | Status | Notes |
-| --- | --- | --- | --- |
-| Monitoring | [`monitoring/`](monitoring/) | maintained | Prometheus + node-exporter + cAdvisor + Grafana. See `monitoring/README.md`. |
-| Infisical | [`infisical/`](infisical/) | maintained | Secrets management platform with Postgres and Redis. See `infisical/README.md`. |
-| Karakeep | [`karakeep/`](karakeep/) | maintained | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |
-| LiteLLM Proxy + Postgres | [`litellm/`](litellm/) | maintained | Standardized LLM proxy. See `litellm/README.md`. |
-| Bifrost AI Gateway | [`bifrost/`](bifrost/) | maintained | OpenAI-compatible AI gateway. See `bifrost/README.md`. |
-| n8n | [`n8n/`](n8n/) | maintained | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `n8n/README.md`. |
-| OpenClaw Gateway + CLI | [`openclaw/`](openclaw/) | maintained | Agent gateway and CLI onboarding. See `openclaw/README.md` (then run `cd openclaw && python3 setup.py`). |
-| RisuAI | [`risuai/`](risuai/) | maintained | Web app, expects a reverse proxy on `caddy-network`. Persistent data in `risuai/save/`. |
-| code-server | [`code-server/`](code-server/) | legacy (not managed) | Kept for reference. May be outdated/broken. |
-| development-all | [`development-all/`](development-all/) | legacy (not managed) | Kept for reference. May be outdated/broken. |
-| development-python3 | [`development-python3/`](development-python3/) | legacy (not managed) | Kept for reference. May be outdated/broken. |
+### Maintained Services
 
-Notes on legacy stacks:
+| Service | Path | Notes |
+| --- | --- | --- |
+| Monitoring | [`monitoring/`](monitoring/) | Prometheus + node-exporter + cAdvisor + Grafana. See `monitoring/README.md`. |
+| Infisical | [`infisical/`](infisical/) | Secrets management platform with Postgres and Redis. See `infisical/README.md`. |
+| Karakeep | [`karakeep/`](karakeep/) | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |
+| LiteLLM Proxy + Postgres | [`litellm/`](litellm/) | Standardized LLM proxy. See `litellm/README.md`. |
+| Bifrost AI Gateway | [`bifrost/`](bifrost/) | OpenAI-compatible AI gateway. See `bifrost/README.md`. |
+| n8n | [`n8n/`](n8n/) | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `n8n/README.md`. |
+| OpenClaw Gateway + CLI | [`openclaw/`](openclaw/) | Agent gateway and CLI onboarding. See `openclaw/README.md` (then run `cd openclaw && python3 setup.py`). |
+| RisuAI | [`risuai/`](risuai/) | Web app, expects a reverse proxy on `caddy-network`. Persistent data in `risuai/save/`. |
+
+### Legacy Services
+
+| Service | Path | Notes |
+| --- | --- | --- |
+| code-server | [`code-server/`](code-server/) | Kept for reference. May be outdated or broken. |
+| development-all | [`development-all/`](development-all/) | Kept for reference. May be outdated or broken. |
+| development-python3 | [`development-python3/`](development-python3/) | Kept for reference. May be outdated or broken. |
 
 - `code-server/`, `development-all/`, and `development-python3/` are not actively maintained.
 - They are preserved for historical context and prior experiments (see git history).

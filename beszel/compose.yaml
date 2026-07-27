@@ -1,0 +1,102 @@
+name: beszel
+
+services:
+  beszel:
+    image: henrygd/beszel:0.18.7
+    container_name: beszel
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_URL: ${BESZEL_APP_URL}
+      CHECK_UPDATES: "true"
+    ports:
+      # Published on host loopback for access from the host-network agent.
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - beszel-data:/beszel_data
+      - beszel-socket:/beszel_socket
+    networks:
+      - caddy-network
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
+      interval: 120s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  beszel-agent:
+    image: henrygd/beszel-agent-nvidia:0.18.7
+    container_name: beszel-agent
+    restart: unless-stopped
+    init: true
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      KEY: ${BESZEL_AGENT_KEY}
+      TOKEN: ${BESZEL_AGENT_TOKEN}
+      HUB_URL: http://localhost:8090
+      FILESYSTEM: nvme0n1p5
+      GPU_COLLECTOR: nvml
+      # Ignore invalid readings from unused NCT6798 motherboard inputs.
+      SENSORS: "-nct6798_systin,nct6798_auxtin*"
+      SMART_DEVICES: /dev/nvme0:nvme,/dev/sda:sat
+      DOCKER_HOST: tcp://127.0.0.1:2375
+      SERVICE_PATTERNS: "containerd*,docker*,fail2ban*,nvidia-persistenced*,smartmontools*,smbd*,ssh*,tailscaled*"
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RAWIO
+    devices:
+      - /dev/nvme0:/dev/nvme0
+      - /dev/sda:/dev/sda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities:
+                - utility
+    volumes:
+      - beszel-agent-data:/var/lib/beszel-agent
+      - beszel-socket:/beszel_socket
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+      - type: bind
+        source: /mnt/data01/.beszel
+        target: /extra-filesystems/sda1
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      beszel-socket-proxy:
+        condition: service_started
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 120s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  beszel-socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:3.4.2
+    container_name: beszel-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+    ports:
+      # Published on host loopback for access from the host-network agent.
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+
+networks:
+  caddy-network:
+    name: caddy-network
+    external: true
+
+volumes:
+  beszel-data:
+  beszel-agent-data:
+  beszel-socket:

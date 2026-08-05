@@ -74,6 +74,7 @@ docker compose down
 | Bifrost AI Gateway | [`bifrost/`](bifrost/) | OpenAI-compatible AI gateway. See `bifrost/README.md`. |
 | n8n | [`n8n/`](n8n/) | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `n8n/README.md`. |
 | OpenClaw Gateway + CLI | [`openclaw/`](openclaw/) | Agent gateway and CLI onboarding. See `openclaw/README.md` (then run `cd openclaw && python3 setup.py`). |
+| opencodex | [`opencodex/`](opencodex/) | Minimal remote OpenCodex proxy for Codex CLI, App, and IDE clients. See `opencodex/README.md`. |
 | RisuAI | [`risuai/`](risuai/) | Web app, expects a reverse proxy on `caddy-network`. Persistent data in `risuai/save/`. |
 
 ### Legacy Services

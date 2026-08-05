@@ -1,0 +1,16 @@
+{
+  "hostname": "0.0.0.0",
+  "port": 10100,
+  "corsAllowOrigins": [
+    "https://opencodex.retn0.kr"
+  ],
+  "providers": {
+    "openai": {
+      "adapter": "openai-responses",
+      "baseUrl": "https://chatgpt.com/backend-api/codex",
+      "authMode": "forward",
+      "codexAccountMode": "pool"
+    }
+  },
+  "defaultProvider": "openai"
+}

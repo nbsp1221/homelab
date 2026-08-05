@@ -1,0 +1,31 @@
+name: opencodex
+
+services:
+  opencodex:
+    image: opencodex:${OPENCODEX_VERSION:?set OPENCODEX_VERSION in .env}
+    build:
+      context: .
+      args:
+        OPENCODEX_VERSION: ${OPENCODEX_VERSION:?set OPENCODEX_VERSION in .env}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    expose:
+      - "10100"
+    volumes:
+      - ./data:/home/node/.opencodex
+      - ${CODEX_HOST_HOME:?set CODEX_HOST_HOME in .env}:/run/codex-host:ro
+    networks:
+      - caddy-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10100/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  caddy-network:
+    name: caddy-network
+    external: true

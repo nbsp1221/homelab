@@ -2,22 +2,22 @@ name: opencodex
 
 services:
   opencodex:
-    image: opencodex:${OPENCODEX_VERSION:?set OPENCODEX_VERSION in .env}
     build:
       context: .
       args:
-        OPENCODEX_VERSION: ${OPENCODEX_VERSION:?set OPENCODEX_VERSION in .env}
-    restart: unless-stopped
+        OPENCODEX_VERSION: ${OPENCODEX_VERSION:?}
+    container_name: opencodex
     init: true
+    restart: unless-stopped
     env_file:
       - .env
     expose:
       - "10100"
-    volumes:
-      - ./data:/home/node/.opencodex
-      - ${CODEX_HOST_HOME:?set CODEX_HOST_HOME in .env}:/run/codex-host:ro
     networks:
       - caddy-network
+    volumes:
+      - opencodex-data:/home/node/.opencodex
+      - ${CODEX_HOST_HOME:?}:/run/codex-host:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10100/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 15s
@@ -29,3 +29,6 @@ networks:
   caddy-network:
     name: caddy-network
     external: true
+
+volumes:
+  opencodex-data:

@@ -1,0 +1,3 @@
+# Local bootstrap copy; live state is stored in the named Docker volume.
+config.json
+config.json.*

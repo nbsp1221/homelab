@@ -80,6 +80,23 @@ The `opencodex-data` volume stores provider configuration, credentials, usage hi
 Back it up before upgrades or destructive Compose operations.
 Do not run `docker compose down -v` unless deleting that state is intentional.
 
+## Patch series
+
+`patches/` carries container-only fixes for upstream bugs that block this Docker
+deployment. The build applies them to the globally installed npm package after
+`npm install` (see `patches/apply-patches.sh`).
+
+Currently applied:
+
+- `ownership-docker-foreground.patch` — [lidge-jun/opencodex#1612](https://github.com/lidge-jun/opencodex/issues/1612):
+  the native-main ownership preflight treats an unaskable systemd probe as
+  "not installed" inside the container (where no systemd exists), unless a unit
+  artifact or service-state evidence is present. Without it, native Codex
+  requests fail with 503 in Docker.
+
+When an upstream release includes the fix, remove the corresponding entry from
+`patches/series` and bump `OPENCODEX_VERSION` in `.env`.
+
 To upgrade, review the new package version in `.env`, then rebuild the image:
 
 ```bash

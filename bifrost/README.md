@@ -4,7 +4,7 @@ Bifrost AI Gateway running behind the repository's external Caddy network.
 
 This stack:
 
-- runs the `maximhq/bifrost:latest` image
+- runs the `maximhq/bifrost:v1.6.5` image
 - joins the external Docker network `caddy-network`
 - does not publish ports to the host
 - expects your reverse proxy to route to `bifrost:8080`
@@ -43,14 +43,13 @@ docker compose logs -f
 openssl rand -hex 32
 ```
 
-Keep `BIFROST_ENCRYPTION_KEY` backed up with `./data/`. Once the database is
-populated, changing the encryption key can make stored secrets unreadable.
+Keep `BIFROST_ENCRYPTION_KEY` backed up with `./data/`.
+Once the database is populated, changing the encryption key can make stored secrets unreadable.
 
 ## Configuration
 
-This stack intentionally runs Bifrost in Web UI configuration mode. Do not
-commit `data/config.json`; when no config file is present, Bifrost stores
-configuration in SQLite under `./data/`.
+This stack intentionally runs Bifrost in Web UI configuration mode.
+Do not commit `data/config.json`; when no config file is present, Bifrost stores configuration in SQLite under `./data/`.
 
 The Compose file provides non-secret runtime settings directly:
 
@@ -62,11 +61,9 @@ The Compose file provides non-secret runtime settings directly:
 - `GOGC=200`
 - `GOMEMLIMIT=900MiB`
 
-The only value expected in `.env` is `BIFROST_ENCRYPTION_KEY`, which is used to
-encrypt stored provider keys and other secrets in the SQLite config database.
+The only value expected in `.env` is `BIFROST_ENCRYPTION_KEY`, which is used to encrypt stored provider keys and other secrets in the SQLite config database.
 
-Dashboard authentication, providers, provider keys, virtual keys, and other
-gateway settings should be configured through the Bifrost dashboard.
+Dashboard authentication, providers, provider keys, virtual keys, and other gateway settings should be configured through the Bifrost dashboard.
 
 ## Reverse Proxy
 

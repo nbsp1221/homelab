@@ -26,7 +26,7 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 ## Quick Start
 
 ```bash
-cd bifrost
+cd compose/bifrost
 cp .env.example .env
 chmod 600 .env
 printf 'BIFROST_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" > .env

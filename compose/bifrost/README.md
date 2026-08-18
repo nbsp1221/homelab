@@ -4,7 +4,7 @@ Bifrost AI Gateway running behind the repository's external Caddy network.
 
 This stack:
 
-- runs the `maximhq/bifrost:v1.6.5` image
+- runs the `maximhq/bifrost:v1.6.11` image
 - joins the external Docker network `caddy-network`
 - does not publish ports to the host
 - expects your reverse proxy to route to `bifrost:8080`

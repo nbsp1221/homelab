@@ -1,0 +1,603 @@
+diff --git a/core/providers/openai/large_payload.go b/core/providers/openai/large_payload.go
+index ae1ec528d8c569ce03bd235692f830d77e597246..c847aa99f2f0eb09e89da52447d917e57765dede 100644
+--- a/core/providers/openai/large_payload.go
++++ b/core/providers/openai/large_payload.go
+@@ -48,6 +48,9 @@ func handleOpenAILargePayloadPassthrough(
+ 	if !isLargePayload {
+ 		return nil, nil, false
+ 	}
++	if bifrostErr := providerUtils.RejectAliasExtraBodyPassthrough(ctx, "large-payload"); bifrostErr != nil {
++		return nil, bifrostErr, true
++	}
+ 
+ 	req := fasthttp.AcquireRequest()
+ 	resp := fasthttp.AcquireResponse()
+diff --git a/core/providers/utils/utils.go b/core/providers/utils/utils.go
+index 848212e1435e3107614ff9e2ed5c40a4b2fcb21c..70ed7439efb35561dc47703998b994171666949c 100644
+--- a/core/providers/utils/utils.go
++++ b/core/providers/utils/utils.go
+@@ -1602,8 +1602,52 @@ func MergeExtraParamsIntoJSON(jsonBody []byte, extraParams map[string]interface{
+ 	return indented.Bytes(), nil
+ }
+ 
++// MergeAliasExtraBodyIntoJSON applies the body preset from the alias selected
++// for this request. It intentionally operates only on the typed JSON path:
++// raw-body and large-payload passthrough callers never reach this helper.
++// Callers' extra_params are merged before this function, so alias values have
++// the documented highest precedence.
++func MergeAliasExtraBodyIntoJSON(ctx context.Context, jsonBody []byte) ([]byte, error) {
++	bifrostCtx, ok := ctx.(*schemas.BifrostContext)
++	if !ok || bifrostCtx == nil {
++		return jsonBody, nil
++	}
++	resolvedAlias := schemas.GetResolvedAlias(bifrostCtx)
++	if resolvedAlias == nil || resolvedAlias.Config == nil || len(resolvedAlias.Config.ExtraBody) == 0 {
++		return jsonBody, nil
++	}
++	if err := resolvedAlias.Config.ValidateExtraBody(resolvedAlias.Key); err != nil {
++		return jsonBody, err
++	}
++	return MergeExtraParamsIntoJSON(jsonBody, resolvedAlias.Config.ExtraBody)
++}
++
++// RejectAliasExtraBodyPassthrough prevents a virtual model contract from being
++// silently bypassed when Bifrost must forward the original request body without
++// converting it to JSON first.
++func RejectAliasExtraBodyPassthrough(ctx context.Context, passthrough string) *schemas.BifrostError {
++	bifrostCtx, ok := ctx.(*schemas.BifrostContext)
++	if !ok || bifrostCtx == nil {
++		return nil
++	}
++	if passthrough == "large-payload" && !IsLargePayloadPassthroughEnabled(ctx) {
++		return nil
++	}
++	resolvedAlias := schemas.GetResolvedAlias(bifrostCtx)
++	if resolvedAlias == nil || resolvedAlias.Config == nil || len(resolvedAlias.Config.ExtraBody) == 0 {
++		return nil
++	}
++	if err := resolvedAlias.Config.ValidateExtraBody(resolvedAlias.Key); err != nil {
++		return NewBifrostOperationError(schemas.ErrProviderRequestMarshal, err)
++	}
++	return NewBifrostBadRequestError(fmt.Sprintf("alias extra_body is not supported with %s passthrough", passthrough))
++}
++
+ // CheckContextAndGetRequestBody checks if the raw request body should be used, and returns it if it exists.
+ func CheckContextAndGetRequestBody(ctx context.Context, request RequestBodyGetter, requestConverter RequestBodyConverter) ([]byte, *schemas.BifrostError) {
++	if bifrostErr := RejectAliasExtraBodyPassthrough(ctx, "large-payload"); bifrostErr != nil {
++		return nil, bifrostErr
++	}
+ 	if IsLargePayloadPassthroughEnabled(ctx) {
+ 		return nil, nil
+ 	}
+@@ -1634,8 +1678,15 @@ func CheckContextAndGetRequestBody(ctx context.Context, request RequestBodyGette
+ 				}
+ 			}
+ 		}
++		jsonBody, err = MergeAliasExtraBodyIntoJSON(ctx, jsonBody)
++		if err != nil {
++			return nil, NewBifrostOperationError(schemas.ErrProviderRequestMarshal, err)
++		}
+ 		return jsonBody, nil
+ 	} else {
++		if bifrostErr := RejectAliasExtraBodyPassthrough(ctx, "raw-body"); bifrostErr != nil {
++			return nil, bifrostErr
++		}
+ 		return rawBody, nil
+ 	}
+ }
+diff --git a/core/schemas/account.go b/core/schemas/account.go
+index 404ffde65204fb34846515bb5d8ec339001d5c09..829ddbf2b1a9878cf182a63ce6305f3afabffd28 100644
+--- a/core/schemas/account.go
++++ b/core/schemas/account.go
+@@ -219,11 +219,12 @@ type ReplicateAliasCfg struct {
+ // family used for provider routing decisions (ModelFamily), and optional
+ // provider-specific overrides that override the key-level defaults.
+ type AliasConfig struct {
+-	ModelID     string       `json:"model_id"`               // wire model identifier sent to the provider
+-	ModelName   *string      `json:"model_name,omitempty"`   // canonical model name used for pricing, logging, and 2nd-tier family routing
+-	ModelFamily *ModelFamily `json:"model_family,omitempty"` // 1st-tier family routing enum
+-	Description string       `json:"description,omitempty"`  // description of the alias for users to understand its purpose (not used by bifrost)
+-	Region      *SecretVar   `json:"region,omitempty"`
++	ModelID     string         `json:"model_id"`               // wire model identifier sent to the provider
++	ModelName   *string        `json:"model_name,omitempty"`   // canonical model name used for pricing, logging, and 2nd-tier family routing
++	ModelFamily *ModelFamily   `json:"model_family,omitempty"` // 1st-tier family routing enum
++	Description string         `json:"description,omitempty"`  // description of the alias for users to understand its purpose (not used by bifrost)
++	ExtraBody   map[string]any `json:"extra_body,omitempty"`   // provider-agnostic JSON fields merged into the final typed request body
++	Region      *SecretVar     `json:"region,omitempty"`
+ 	// ProjectID is a per-alias project override shared across providers (like Region).
+ 	// Vertex uses it as the GCP project; Bedrock and Bedrock Mantle use it as the
+ 	// AWS project sent via the OpenAI-Project / anthropic-workspace-id header. Kept
+@@ -247,6 +248,7 @@ func (ac AliasConfig) isLegacyShape() bool {
+ 		ac.ModelName == nil &&
+ 		ac.ModelFamily == nil &&
+ 		ac.Description == "" &&
++		len(ac.ExtraBody) == 0 &&
+ 		ac.Region == nil &&
+ 		ac.ProjectID == nil &&
+ 		ac.UseAnthropicEndpoints == nil &&
+@@ -318,6 +320,9 @@ func (ka KeyAliases) Validate(providerKey ModelProvider) error {
+ 		if ac.ModelFamily != nil && !ac.ModelFamily.IsValid() {
+ 			return fmt.Errorf("alias %q: invalid model_family %q", from, *ac.ModelFamily)
+ 		}
++		if err := ac.ValidateExtraBody(from); err != nil {
++			return err
++		}
+ 		if ac.AzureAliasCfg != nil && providerKey != Azure {
+ 			return fmt.Errorf("alias %q: azure sub-config is only valid on Azure keys (got provider %q)", from, providerKey)
+ 		}
+@@ -339,6 +344,30 @@ func (ka KeyAliases) Validate(providerKey ModelProvider) error {
+ 	return nil
+ }
+ 
++var aliasExtraBodyReservedKeys = map[string]struct{}{
++	"extra_body":   {},
++	"extra_params": {},
++	"input":        {},
++	"messages":     {},
++	"model":        {},
++	"stream":       {},
++}
++
++// ValidateExtraBody rejects fields that would replace the caller's request or
++// alter Bifrost's routing/pipeline invariants. Other provider-specific fields
++// are intentionally allowed so aliases remain provider-agnostic.
++func (ac AliasConfig) ValidateExtraBody(alias string) error {
++	for key := range ac.ExtraBody {
++		if strings.TrimSpace(key) != key || key == "" {
++			return fmt.Errorf("alias %q: extra_body keys cannot be empty or have leading/trailing whitespace", alias)
++		}
++		if _, reserved := aliasExtraBodyReservedKeys[strings.ToLower(key)]; reserved {
++			return fmt.Errorf("alias %q: extra_body cannot override reserved field %q", alias, key)
++		}
++	}
++	return nil
++}
++
+ // Resolve returns the wire model identifier for the given user-facing model name.
+ // If no alias matches, the input is returned unchanged. Case-insensitive fallback
+ // matches the prior behavior.
+diff --git a/transports/config.schema.json b/transports/config.schema.json
+index c4facc8fb5e99218901f5a48214118b3176ff245..5966930dc63b3519fef2cae08d895ad45ecf0fdb 100644
+--- a/transports/config.schema.json
++++ b/transports/config.schema.json
+@@ -3950,6 +3950,11 @@
+                   "description": {
+                     "type": "string"
+                   },
++                  "extra_body": {
++                    "type": "object",
++                    "description": "Provider-specific JSON fields merged into the final typed request body. Routing and request-shape fields are reserved.",
++                    "additionalProperties": true
++                  },
+                   "region": {
+                     "type": "string",
+                     "description": "Per-alias region override (can use env. prefix)."
+@@ -7548,4 +7553,4 @@
+       }
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx b/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx
+index d71a652a19e0cae9aac18144c066e83e13b61bbd..4b909d55081bb9d47af365a9edb77201a1c245db 100644
+--- a/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx
++++ b/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx
+@@ -371,6 +371,21 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
+ 										<DeploymentsTable
+ 											providerName={providerName}
+ 											value={field.value}
++											onValidationChange={(valid) => {
++												const errorPath = "key.aliases" as const;
++												if (valid) {
++													form.clearErrors(errorPath);
++												} else {
++													form.setError(errorPath, {
++														type: "manual",
++														message: "Fix the invalid extra request body before saving.",
++													});
++												}
++												form.setValue("key._alias_extra_body_invalid", !valid, {
++													shouldDirty: true,
++													shouldValidate: true,
++												});
++											}}
+ 											onChange={(next) => {
+ 												form.clearErrors("key.aliases");
+ 												field.onChange(Object.keys(next).length > 0 ? next : {});
+@@ -1242,4 +1257,4 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
+ 			)}
+ 		</div>
+ 	);
+-}
+\ No newline at end of file
++}
+diff --git a/ui/app/workspace/providers/fragments/deploymentsTable.tsx b/ui/app/workspace/providers/fragments/deploymentsTable.tsx
+index 98b58db1b82a408aa6f71f6b9af05a5cc5f762d4..7673fd5f3a8592156f1a70350131cba6d78a5e8b 100644
+--- a/ui/app/workspace/providers/fragments/deploymentsTable.tsx
++++ b/ui/app/workspace/providers/fragments/deploymentsTable.tsx
+@@ -7,16 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
+ import { Switch } from "@/components/ui/switch";
+ import { Textarea } from "@/components/ui/textarea";
+ import { AliasConfig, ModelFamily, ModelFamilyValues } from "@/lib/types/config";
+-import { SecretVar } from "@/lib/types/schemas";
++import { getAliasExtraBodyKeyError, SecretVar } from "@/lib/types/schemas";
+ import { cn } from "@/lib/utils";
+ import { ChevronDown, ChevronRight, Trash } from "lucide-react";
+-import { useId, useMemo, useRef, useState } from "react";
++import { useEffect, useId, useMemo, useRef, useState } from "react";
+ 
+ type DeploymentsValue = Record<string, AliasConfig> | undefined | null;
+ 
+ interface Props {
+ 	value: DeploymentsValue;
+ 	onChange: (next: Record<string, AliasConfig>) => void;
++	onValidationChange?: (valid: boolean) => void;
+ 	providerName: string;
+ 	disabled?: boolean;
+ }
+@@ -378,16 +379,99 @@ function ProviderSection({ providerName, ...props }: ProviderSectionProps & { pr
+ 	}
+ }
+ 
++interface ExtraBodyDraft {
++	text: string;
++	error?: string;
++}
++
++function ExtraBodyEditor({
++	config,
++	draft,
++	onChange,
++	onDraftChange,
++	disabled,
++	onValidationChange,
++}: {
++	config: AliasConfig;
++	draft?: ExtraBodyDraft;
++	onChange: (patch: Partial<AliasConfig>) => void;
++	onDraftChange: (draft: ExtraBodyDraft) => void;
++	disabled?: boolean;
++	onValidationChange?: (valid: boolean) => void;
++}) {
++	const serialized = config.extra_body ? JSON.stringify(config.extra_body, null, 2) : "";
++	const text = draft?.text ?? serialized;
++	const error = draft?.error;
++
++	const update = (nextText: string) => {
++		const setDraft = (nextError?: string) => onDraftChange({ text: nextText, error: nextError });
++		if (nextText.trim() === "") {
++			setDraft();
++			onValidationChange?.(true);
++			onChange({ extra_body: undefined });
++			return;
++		}
++		let parsed: unknown;
++		try {
++			parsed = JSON.parse(nextText);
++		} catch {
++			setDraft("Extra request body must be valid JSON.");
++			onValidationChange?.(false);
++			return;
++		}
++		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
++			setDraft("Extra request body must be a JSON object.");
++			onValidationChange?.(false);
++			return;
++		}
++		for (const key of Object.keys(parsed)) {
++			const message = getAliasExtraBodyKeyError(key);
++			if (message) {
++				setDraft(message);
++				onValidationChange?.(false);
++				return;
++			}
++		}
++		setDraft();
++		onValidationChange?.(true);
++		onChange({ extra_body: parsed as Record<string, unknown> });
++	};
++
++	return (
++		<FieldRow
++			label="Extra request body"
++			hint="JSON fields merged into the final provider request. Model, messages, input, stream, extra_params, and extra_body are reserved."
++		>
++			<Textarea
++				value={text}
++				onChange={(event) => update(event.target.value)}
++				placeholder={'{\n  "service_tier": "flex"\n}'}
++				rows={5}
++				disabled={disabled}
++				aria-invalid={error ? true : undefined}
++				data-testid="deployment-extra-body"
++			/>
++			{error && <p className="text-destructive text-xs">{error}</p>}
++		</FieldRow>
++	);
++}
++
+ function ExpandedConfigPanel({
+ 	config,
++	draft,
+ 	onChange,
++	onDraftChange,
+ 	providerName,
+ 	disabled,
++	onValidationChange,
+ }: {
+ 	config: AliasConfig;
++	draft?: ExtraBodyDraft;
+ 	onChange: (patch: Partial<AliasConfig>) => void;
++	onDraftChange: (draft: ExtraBodyDraft) => void;
+ 	providerName: string;
+ 	disabled?: boolean;
++	onValidationChange?: (valid: boolean) => void;
+ }) {
+ 	return (
+ 		<div className="space-y-6 border-t p-4">
+@@ -432,12 +516,20 @@ function ExpandedConfigPanel({
+ 					/>
+ 				</FieldRow>
+ 			</div>
++			<ExtraBodyEditor
++				config={config}
++				draft={draft}
++				onChange={onChange}
++				onDraftChange={onDraftChange}
++				disabled={disabled}
++				onValidationChange={onValidationChange}
++			/>
+ 			<ProviderSection providerName={providerName} config={config} onChange={onChange} disabled={disabled} />
+ 		</div>
+ 	);
+ }
+ 
+-export function DeploymentsTable({ value, onChange, providerName, disabled = false }: Props) {
++export function DeploymentsTable({ value, onChange, onValidationChange, providerName, disabled = false }: Props) {
+ 	const normalized = useMemo(() => normalize(value), [value]);
+ 	const rows: Row[] = useMemo(() => Object.entries(normalized).map(([name, config]) => ({ name, config })), [normalized]);
+ 
+@@ -460,6 +552,9 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
+ 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
+ 	const [draftExpanded, setDraftExpanded] = useState(false);
+ 	const [draftRow, setDraftRow] = useState<Row>({ name: "", config: { model_id: "" } });
++	const [invalidExtraBodyRows, setInvalidExtraBodyRows] = useState<Set<string>>(new Set());
++	const [extraBodyDrafts, setExtraBodyDrafts] = useState<Record<string, ExtraBodyDraft>>({});
++	const lastExtraBodyValidityRef = useRef(true);
+ 	// Per-row pending rename state, keyed by stable rowId. Keeps the input
+ 	// controllable while a typed name collides with another committed row or is
+ 	// empty — without this, we'd either snap the input back (jarring) or emit a
+@@ -489,6 +584,18 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
+ 	const removeRow = (rowId: string, name: string) => {
+ 		emit(rows.filter((r) => r.name !== name));
+ 		rowIdsRef.current.delete(name);
++		setInvalidExtraBodyRows((previous) => {
++			if (!previous.has(rowId)) return previous;
++			const next = new Set(previous);
++			next.delete(rowId);
++			return next;
++		});
++		setExtraBodyDrafts((previous) => {
++			if (!(rowId in previous)) return previous;
++			const next = { ...previous };
++			delete next[rowId];
++			return next;
++		});
+ 		setExpanded((prev) => {
+ 			if (!prev.has(rowId)) return prev;
+ 			const next = new Set(prev);
+@@ -530,11 +637,32 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
+ 		setDraftRow((r) => ({ ...r, config: { ...r.config, ...patch } }));
+ 	};
+ 
++	const setExtraBodyValidation = (rowId: string, valid: boolean) => {
++		setInvalidExtraBodyRows((previous) => {
++			const next = new Set(previous);
++			if (valid) next.delete(rowId);
++			else next.add(rowId);
++			return next;
++		});
++	};
++
++	const setExtraBodyDraft = (rowId: string, draft: ExtraBodyDraft) => {
++		setExtraBodyDrafts((previous) => ({ ...previous, [rowId]: draft }));
++	};
++
++	useEffect(() => {
++		const valid = invalidExtraBodyRows.size === 0;
++		if (lastExtraBodyValidityRef.current === valid) return;
++		lastExtraBodyValidityRef.current = valid;
++		onValidationChange?.(valid);
++	}, [invalidExtraBodyRows, onValidationChange]);
++
+ 	// Commit the in-progress draft row into the committed list. Called from
+ 	// blur / Enter / model-selection. No-op when either field is missing — the
+ 	// inline hint below the draft row warns the user before submit that a
+ 	// partial entry will be dropped.
+ 	const commitDraftIfReady = (override?: Row) => {
++		if (invalidExtraBodyRows.has("draft")) return;
+ 		const candidate = override ?? draftRow;
+ 		const name = candidate.name.trim();
+ 		const modelId = candidate.config.model_id.trim();
+@@ -542,6 +670,18 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
+ 		const exists = Object.keys(normalized).some((k) => k.trim().toLowerCase() === name.toLowerCase());
+ 		if (exists) return;
+ 		emit([...rows, { name, config: { ...candidate.config, model_id: modelId } }]);
++		setExtraBodyDrafts((previous) => {
++			if (!("draft" in previous)) return previous;
++			const next = { ...previous };
++			delete next.draft;
++			return next;
++		});
++		setInvalidExtraBodyRows((previous) => {
++			if (!previous.has("draft")) return previous;
++			const next = new Set(previous);
++			next.delete("draft");
++			return next;
++		});
+ 		setDraftRow({ name: "", config: { model_id: "" } });
+ 		setDraftExpanded(false);
+ 	};
+@@ -624,6 +764,9 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
+ 										onChange={(patch) => patchConfig(row.name, patch)}
+ 										providerName={providerName}
+ 										disabled={disabled}
++										draft={extraBodyDrafts[row.rowId]}
++										onDraftChange={(draft) => setExtraBodyDraft(row.rowId, draft)}
++										onValidationChange={(valid) => setExtraBodyValidation(row.rowId, valid)}
+ 									/>
+ 								</CollapsibleContent>
+ 							</div>
+@@ -676,11 +819,19 @@ export function DeploymentsTable({ value, onChange, providerName, disabled = fal
+ 								</p>
+ 							)}
+ 						<CollapsibleContent>
+-							<ExpandedConfigPanel config={draftRow.config} onChange={patchDraftConfig} providerName={providerName} disabled={disabled} />
++							<ExpandedConfigPanel
++								config={draftRow.config}
++								draft={extraBodyDrafts.draft}
++								onChange={patchDraftConfig}
++								onDraftChange={(draft) => setExtraBodyDraft("draft", draft)}
++								providerName={providerName}
++								disabled={disabled}
++								onValidationChange={(valid) => setExtraBodyValidation("draft", valid)}
++							/>
+ 						</CollapsibleContent>
+ 					</div>
+ 				</Collapsible>
+ 			</div>
+ 		</div>
+ 	);
+-}
+\ No newline at end of file
++}
+diff --git a/ui/app/workspace/providers/views/providerKeyForm.tsx b/ui/app/workspace/providers/views/providerKeyForm.tsx
+index f8293261796dc4d0d3f585fac1232e605ae093e0..90af34ff401f1d53fdd37fd9aed5ad62e22ffc7f 100644
+--- a/ui/app/workspace/providers/views/providerKeyForm.tsx
++++ b/ui/app/workspace/providers/views/providerKeyForm.tsx
+@@ -42,13 +42,14 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
+ 		mode: "onChange",
+ 		reValidateMode: "onChange",
+ 		defaultValues: {
+-			key: (currentKey as ProviderKeyFormValues) ?? {
++			key: currentKey ? { ...currentKey, _alias_extra_body_invalid: false } : {
+ 				id: uuid(),
+ 				name: "",
+ 				models: ["*"],
+ 				blacklisted_models: [],
+ 				weight: 1.0,
+ 				enabled: true,
++				_alias_extra_body_invalid: false,
+ 			},
+ 		},
+ 	});
+@@ -57,7 +58,7 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
+ 	// Skip reset if user has unsaved edits to avoid discarding changes during background refetches
+ 	useEffect(() => {
+ 		if (!isEditing || !currentKey || form.formState.isDirty) return;
+-		form.reset({ key: currentKey as ProviderKeyFormValues });
++		form.reset({ key: { ...currentKey, _alias_extra_body_invalid: false } as ProviderKeyFormValues });
+ 	}, [isEditing, currentKey, form]);
+ 
+ 	// Trigger validation on mount when editing existing data
+@@ -84,6 +85,7 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
+ 		if (isEditing && !currentKey) return;
+ 		// Strip internal _auth_type fields before sending to API
+ 		const key = { ...value.key };
++		delete key._alias_extra_body_invalid;
+ 		if (key.azure_key_config) {
+ 			const { _auth_type, ...rest } = key.azure_key_config;
+ 			key.azure_key_config = rest;
+@@ -167,4 +169,4 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
+ 			</form>
+ 		</Form>
+ 	);
+-}
+\ No newline at end of file
++}
+diff --git a/ui/lib/types/config.ts b/ui/lib/types/config.ts
+index 40a372f32d8cc657d97c9cd3079ab1015c34456c..af2c1e79f6d8b937a2da51f15f2af3e1c4457d3c 100644
+--- a/ui/lib/types/config.ts
++++ b/ui/lib/types/config.ts
+@@ -57,6 +57,7 @@ export interface AliasConfig {
+ 	model_name?: string;
+ 	model_family?: ModelFamily;
+ 	description?: string;
++	extra_body?: Record<string, unknown>;
+ 	region?: SecretVar;
+ 	// Azure overrides
+ 	api_version?: string;
+@@ -725,4 +726,4 @@ export interface ProviderFormData {
+ }
+ 
+ // Status types
+-export type ProviderStatus = "active" | "error" | "deleted";
+\ No newline at end of file
++export type ProviderStatus = "active" | "error" | "deleted";
+diff --git a/ui/lib/types/schemas.ts b/ui/lib/types/schemas.ts
+index 160fbb38d14769488f34de3b452872a667d4f3c2..50eacbb7015cbff2877b5a32b5c2eaff6e4a780b 100644
+--- a/ui/lib/types/schemas.ts
++++ b/ui/lib/types/schemas.ts
+@@ -284,11 +284,33 @@ export const modelFamilySchema = z.enum([
+ // AliasConfig schema — mirrors schemas.AliasConfig with the embedded
+ // provider sub-configs flattened to top-level optional fields (matches Go's
+ // embedded-pointer-struct JSON output).
++export const aliasExtraBodyReservedKeys = new Set(["extra_body", "extra_params", "input", "messages", "model", "stream"]);
++
++export function getAliasExtraBodyKeyError(key: string): string | undefined {
++	if (key === "" || key.trim() !== key) {
++		return "Extra request body keys cannot be empty or have leading/trailing whitespace.";
++	}
++	if (aliasExtraBodyReservedKeys.has(key.toLowerCase())) {
++		return "The reserved field '" + key + "' cannot be overridden here.";
++	}
++	return undefined;
++}
++
++const extraBodySchema = z.record(z.string(), z.unknown()).superRefine((value, ctx) => {
++	for (const key of Object.keys(value)) {
++		const message = getAliasExtraBodyKeyError(key);
++		if (message) {
++			ctx.addIssue({ code: "custom", message, path: [key] });
++		}
++	}
++});
++
+ const aliasConfigObjectSchema = z.object({
+ 	model_id: z.string().trim().min(1, "Model ID is required"),
+ 	model_name: z.string().trim().optional(),
+ 	model_family: modelFamilySchema.optional(),
+ 	description: z.string().optional(),
++	extra_body: extraBodySchema.optional(),
+ 	region: secretVarSchema.optional(),
+ 	// Azure overrides
+ 	api_version: z.string().optional(),
+@@ -352,6 +374,7 @@ export const modelProviderKeySchema = z
+ 		use_for_batch_api: z.boolean().optional(),
+ 		use_anthropic_endpoints: z.boolean().optional(),
+ 		enabled: z.boolean().optional(),
++		_alias_extra_body_invalid: z.boolean().optional(),
+ 	})
+ 	.refine(
+ 		(data) => {
+@@ -395,7 +418,11 @@ export const modelProviderKeySchema = z
+ 			message: "API Key is required",
+ 			path: ["value"],
+ 		},
+-	);
++	)
++	.refine((data) => data._alias_extra_body_invalid !== true, {
++		message: "Fix the invalid extra request body before saving.",
++		path: ["aliases"],
++	});
+ 
+ // Network config schema
+ export const networkConfigSchema = z
+@@ -1313,4 +1340,4 @@ export type GlobalProxyFormSchema = z.infer<typeof globalProxyFormSchema>;
+ export type GlobalHeaderFilterConfigSchema = z.infer<typeof globalHeaderFilterConfigSchema>;
+ export type GlobalHeaderFilterFormSchema = z.infer<typeof globalHeaderFilterFormSchema>;
+ export type RoutingRuleSchema = z.infer<typeof routingRuleSchema>;
+-export type BudgetOverrideFormSchema = z.infer<typeof budgetOverrideFormSchema>;
+\ No newline at end of file
++export type BudgetOverrideFormSchema = z.infer<typeof budgetOverrideFormSchema>;

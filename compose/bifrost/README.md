@@ -4,7 +4,7 @@ Bifrost AI Gateway running behind the repository's external Caddy network.
 
 This stack:
 
-- runs the `maximhq/bifrost:v1.6.11` image
+- builds the version-pinned `maximhq/bifrost` v1.6.11 source tag with the local alias-body patch overlay
 - joins the external Docker network `caddy-network`
 - does not publish ports to the host
 - expects your reverse proxy to route to `bifrost:8080`
@@ -31,7 +31,7 @@ cp .env.example .env
 chmod 600 .env
 printf 'BIFROST_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" > .env
 
-docker compose up -d
+docker compose up -d --build
 docker compose ps
 docker compose logs -f
 ```
@@ -92,7 +92,7 @@ docker compose exec -T bifrost wget -qO- http://127.0.0.1:8080/health
 ## Operations
 
 ```bash
-docker compose pull
+docker compose build --pull
 docker compose up -d
 docker compose logs -f
 docker compose restart

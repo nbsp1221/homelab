@@ -2,7 +2,13 @@ name: bifrost
 
 services:
   bifrost:
-    image: maximhq/bifrost:v1.6.11
+    build:
+      context: .
+      dockerfile: Dockerfile
+      pull: true
+      args:
+        BIFROST_VERSION: "1.6.11"
+    container_name: bifrost
     restart: unless-stopped
     environment:
       APP_HOST: 0.0.0.0
@@ -20,7 +26,7 @@ services:
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -29,6 +35,8 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    security_opt:
+      - no-new-privileges:true
 
 networks:
   caddy-network:

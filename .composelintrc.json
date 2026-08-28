@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "no-unbound-ports": [
+      "warn",
+      {
+        "allow": [
+          {
+            "service": "caddy",
+            "published": ["80/tcp", "443/tcp", "443/udp"],
+            "reason": "Public HTTP and HTTPS ingress"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - composelint@0.2.0

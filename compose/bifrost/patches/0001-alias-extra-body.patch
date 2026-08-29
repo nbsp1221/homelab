@@ -1,5 +1,5 @@
 diff --git a/core/providers/openai/large_payload.go b/core/providers/openai/large_payload.go
-index ae1ec528d8c569ce03bd235692f830d77e597246..c847aa99f2f0eb09e89da52447d917e57765dede 100644
+index ae1ec52..c847aa9 100644
 --- a/core/providers/openai/large_payload.go
 +++ b/core/providers/openai/large_payload.go
 @@ -48,6 +48,9 @@ func handleOpenAILargePayloadPassthrough(
@@ -13,11 +13,11 @@ index ae1ec528d8c569ce03bd235692f830d77e597246..c847aa99f2f0eb09e89da52447d917e5
  	req := fasthttp.AcquireRequest()
  	resp := fasthttp.AcquireResponse()
 diff --git a/core/providers/utils/utils.go b/core/providers/utils/utils.go
-index 848212e1435e3107614ff9e2ed5c40a4b2fcb21c..70ed7439efb35561dc47703998b994171666949c 100644
+index 622684e..8c3fd6e 100644
 --- a/core/providers/utils/utils.go
 +++ b/core/providers/utils/utils.go
-@@ -1602,8 +1602,52 @@ func MergeExtraParamsIntoJSON(jsonBody []byte, extraParams map[string]interface{
- 	return indented.Bytes(), nil
+@@ -1736,8 +1736,52 @@ func StartScopedPhaseSpan(ctx *schemas.BifrostContext, name string) (schemas.Tra
+ 	return t, h, func() { ctx.SetValue(schemas.BifrostContextKeySpanID, prev) }
  }
  
 +// MergeAliasExtraBodyIntoJSON applies the body preset from the alias selected
@@ -69,14 +69,20 @@ index 848212e1435e3107614ff9e2ed5c40a4b2fcb21c..70ed7439efb35561dc47703998b99417
  	if IsLargePayloadPassthroughEnabled(ctx) {
  		return nil, nil
  	}
-@@ -1634,8 +1678,15 @@ func CheckContextAndGetRequestBody(ctx context.Context, request RequestBodyGette
+@@ -1792,11 +1836,21 @@ func CheckContextAndGetRequestBody(ctx context.Context, request RequestBodyGette
  				}
  			}
  		}
 +		jsonBody, err = MergeAliasExtraBodyIntoJSON(ctx, jsonBody)
 +		if err != nil {
++			if mt != nil {
++				mt.EndSpan(mhdl, schemas.SpanStatusError, err.Error())
++			}
 +			return nil, NewBifrostOperationError(schemas.ErrProviderRequestMarshal, err)
 +		}
+ 		if mt != nil {
+ 			mt.EndSpan(mhdl, schemas.SpanStatusOk, "")
+ 		}
  		return jsonBody, nil
  	} else {
 +		if bifrostErr := RejectAliasExtraBodyPassthrough(ctx, "raw-body"); bifrostErr != nil {
@@ -86,7 +92,7 @@ index 848212e1435e3107614ff9e2ed5c40a4b2fcb21c..70ed7439efb35561dc47703998b99417
  	}
  }
 diff --git a/core/schemas/account.go b/core/schemas/account.go
-index 404ffde65204fb34846515bb5d8ec339001d5c09..829ddbf2b1a9878cf182a63ce6305f3afabffd28 100644
+index 0d23575..e80525c 100644
 --- a/core/schemas/account.go
 +++ b/core/schemas/account.go
 @@ -219,11 +219,12 @@ type ReplicateAliasCfg struct {
@@ -157,10 +163,10 @@ index 404ffde65204fb34846515bb5d8ec339001d5c09..829ddbf2b1a9878cf182a63ce6305f3a
  // If no alias matches, the input is returned unchanged. Case-insensitive fallback
  // matches the prior behavior.
 diff --git a/transports/config.schema.json b/transports/config.schema.json
-index c4facc8fb5e99218901f5a48214118b3176ff245..5966930dc63b3519fef2cae08d895ad45ecf0fdb 100644
+index bdffb8b..4564f4e 100644
 --- a/transports/config.schema.json
 +++ b/transports/config.schema.json
-@@ -3950,6 +3950,11 @@
+@@ -4175,6 +4175,11 @@
                    "description": {
                      "type": "string"
                    },
@@ -172,18 +178,11 @@ index c4facc8fb5e99218901f5a48214118b3176ff245..5966930dc63b3519fef2cae08d895ad4
                    "region": {
                      "type": "string",
                      "description": "Per-alias region override (can use env. prefix)."
-@@ -7548,4 +7553,4 @@
-       }
-     }
-   }
--}
-\ No newline at end of file
-+}
 diff --git a/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx b/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx
-index d71a652a19e0cae9aac18144c066e83e13b61bbd..4b909d55081bb9d47af365a9edb77201a1c245db 100644
+index 244c0fc..58ee0fe 100644
 --- a/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx
 +++ b/ui/app/workspace/providers/fragments/apiKeysFormFragment.tsx
-@@ -371,6 +371,21 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
+@@ -458,6 +458,21 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
  										<DeploymentsTable
  											providerName={providerName}
  											value={field.value}
@@ -205,7 +204,7 @@ index d71a652a19e0cae9aac18144c066e83e13b61bbd..4b909d55081bb9d47af365a9edb77201
  											onChange={(next) => {
  												form.clearErrors("key.aliases");
  												field.onChange(Object.keys(next).length > 0 ? next : {});
-@@ -1242,4 +1257,4 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
+@@ -1335,4 +1350,4 @@ export function ApiKeyFormFragment({ control, providerName, baseProviderType, fo
  			)}
  		</div>
  	);
@@ -213,7 +212,7 @@ index d71a652a19e0cae9aac18144c066e83e13b61bbd..4b909d55081bb9d47af365a9edb77201
 \ No newline at end of file
 +}
 diff --git a/ui/app/workspace/providers/fragments/deploymentsTable.tsx b/ui/app/workspace/providers/fragments/deploymentsTable.tsx
-index 98b58db1b82a408aa6f71f6b9af05a5cc5f762d4..7673fd5f3a8592156f1a70350131cba6d78a5e8b 100644
+index 98b58db..7673fd5 100644
 --- a/ui/app/workspace/providers/fragments/deploymentsTable.tsx
 +++ b/ui/app/workspace/providers/fragments/deploymentsTable.tsx
 @@ -7,16 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
@@ -473,7 +472,7 @@ index 98b58db1b82a408aa6f71f6b9af05a5cc5f762d4..7673fd5f3a8592156f1a70350131cba6
 \ No newline at end of file
 +}
 diff --git a/ui/app/workspace/providers/views/providerKeyForm.tsx b/ui/app/workspace/providers/views/providerKeyForm.tsx
-index f8293261796dc4d0d3f585fac1232e605ae093e0..90af34ff401f1d53fdd37fd9aed5ad62e22ffc7f 100644
+index daf4b3d..5c270d8 100644
 --- a/ui/app/workspace/providers/views/providerKeyForm.tsx
 +++ b/ui/app/workspace/providers/views/providerKeyForm.tsx
 @@ -42,13 +42,14 @@ export default function ProviderKeyForm({ provider, keyId, onCancel, onSave }: P
@@ -517,7 +516,7 @@ index f8293261796dc4d0d3f585fac1232e605ae093e0..90af34ff401f1d53fdd37fd9aed5ad62
 \ No newline at end of file
 +}
 diff --git a/ui/lib/types/config.ts b/ui/lib/types/config.ts
-index 40a372f32d8cc657d97c9cd3079ab1015c34456c..af2c1e79f6d8b937a2da51f15f2af3e1c4457d3c 100644
+index 5d363e9..21d55a3 100644
 --- a/ui/lib/types/config.ts
 +++ b/ui/lib/types/config.ts
 @@ -57,6 +57,7 @@ export interface AliasConfig {
@@ -528,7 +527,7 @@ index 40a372f32d8cc657d97c9cd3079ab1015c34456c..af2c1e79f6d8b937a2da51f15f2af3e1
  	region?: SecretVar;
  	// Azure overrides
  	api_version?: string;
-@@ -725,4 +726,4 @@ export interface ProviderFormData {
+@@ -746,4 +747,4 @@ export interface ProviderFormData {
  }
  
  // Status types
@@ -536,10 +535,10 @@ index 40a372f32d8cc657d97c9cd3079ab1015c34456c..af2c1e79f6d8b937a2da51f15f2af3e1
 \ No newline at end of file
 +export type ProviderStatus = "active" | "error" | "deleted";
 diff --git a/ui/lib/types/schemas.ts b/ui/lib/types/schemas.ts
-index 160fbb38d14769488f34de3b452872a667d4f3c2..50eacbb7015cbff2877b5a32b5c2eaff6e4a780b 100644
+index 44901c2..7383843 100644
 --- a/ui/lib/types/schemas.ts
 +++ b/ui/lib/types/schemas.ts
-@@ -284,11 +284,33 @@ export const modelFamilySchema = z.enum([
+@@ -295,11 +295,33 @@ export const modelFamilySchema = z.enum([
  // AliasConfig schema — mirrors schemas.AliasConfig with the embedded
  // provider sub-configs flattened to top-level optional fields (matches Go's
  // embedded-pointer-struct JSON output).
@@ -573,7 +572,7 @@ index 160fbb38d14769488f34de3b452872a667d4f3c2..50eacbb7015cbff2877b5a32b5c2eaff
  	region: secretVarSchema.optional(),
  	// Azure overrides
  	api_version: z.string().optional(),
-@@ -352,6 +374,7 @@ export const modelProviderKeySchema = z
+@@ -363,6 +385,7 @@ export const modelProviderKeySchema = z
  		use_for_batch_api: z.boolean().optional(),
  		use_anthropic_endpoints: z.boolean().optional(),
  		enabled: z.boolean().optional(),
@@ -581,7 +580,7 @@ index 160fbb38d14769488f34de3b452872a667d4f3c2..50eacbb7015cbff2877b5a32b5c2eaff
  	})
  	.refine(
  		(data) => {
-@@ -395,7 +418,11 @@ export const modelProviderKeySchema = z
+@@ -406,7 +429,11 @@ export const modelProviderKeySchema = z
  			message: "API Key is required",
  			path: ["value"],
  		},
@@ -594,7 +593,7 @@ index 160fbb38d14769488f34de3b452872a667d4f3c2..50eacbb7015cbff2877b5a32b5c2eaff
  
  // Network config schema
  export const networkConfigSchema = z
-@@ -1313,4 +1340,4 @@ export type GlobalProxyFormSchema = z.infer<typeof globalProxyFormSchema>;
+@@ -1375,4 +1402,4 @@ export type GlobalProxyFormSchema = z.infer<typeof globalProxyFormSchema>;
  export type GlobalHeaderFilterConfigSchema = z.infer<typeof globalHeaderFilterConfigSchema>;
  export type GlobalHeaderFilterFormSchema = z.infer<typeof globalHeaderFilterFormSchema>;
  export type RoutingRuleSchema = z.infer<typeof routingRuleSchema>;

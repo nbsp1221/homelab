@@ -4,7 +4,7 @@ Bifrost AI Gateway running behind the repository's external Caddy network.
 
 This stack:
 
-- builds the version-pinned `maximhq/bifrost` v1.6.11 source tag with the local alias-body patch overlay
+- builds the version-pinned `maximhq/bifrost` v2.0.0 source tag with the local alias-body patch overlay
 - joins the external Docker network `caddy-network`
 - does not publish ports to the host
 - expects your reverse proxy to route to `bifrost:8080`
@@ -30,21 +30,17 @@ cd compose/bifrost
 cp .env.example .env
 chmod 600 .env
 printf 'BIFROST_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+printf 'BIFROST_SETUP_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
 
 docker compose up -d --build
 docker compose ps
 docker compose logs -f
 ```
 
-## Encryption Key
+## Secrets
 
-```bash
-# BIFROST_ENCRYPTION_KEY
-openssl rand -hex 32
-```
-
-Keep `BIFROST_ENCRYPTION_KEY` backed up with `./data/`.
-Once the database is populated, changing the encryption key can make stored secrets unreadable.
+- `BIFROST_ENCRYPTION_KEY` encrypts stored provider keys and other secrets. Back it up with `./data/`; changing it can make existing secrets unreadable.
+- `BIFROST_SETUP_TOKEN` authorizes creation of the first admin account on a fresh deployment. It is not needed for normal operation after an admin exists.
 
 ## Configuration
 
@@ -61,8 +57,6 @@ The Compose file provides non-secret runtime settings directly:
 - `GOGC=200`
 - `GOMEMLIMIT=900MiB`
 
-The only value expected in `.env` is `BIFROST_ENCRYPTION_KEY`, which is used to encrypt stored provider keys and other secrets in the SQLite config database.
-
 Dashboard authentication, providers, provider keys, virtual keys, and other gateway settings should be configured through the Bifrost dashboard.
 
 ## Reverse Proxy
@@ -70,7 +64,7 @@ Dashboard authentication, providers, provider keys, virtual keys, and other gate
 Example Caddyfile snippet:
 
 ```caddy
-bifrost.retn0.kr {
+bifrost.example.com {
   reverse_proxy bifrost:8080
 }
 ```

@@ -32,7 +32,7 @@ COPY --from=source-patched /src/ui/ ./
 RUN npm run build-enterprise
 
 # Build the patched Go transport binary with the patched local core module.
-FROM golang:1.26-alpine3.23 AS builder
+FROM golang:1.27.0-alpine3.24 AS builder
 ARG BIFROST_VERSION
 WORKDIR /app
 RUN apk add --no-cache \

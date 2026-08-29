@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
       pull: true
       args:
-        BIFROST_VERSION: "1.6.11"
+        BIFROST_VERSION: "2.0.0"
     container_name: bifrost
     restart: unless-stopped
     environment:
@@ -19,6 +19,7 @@ services:
       GOGC: "200"
       GOMEMLIMIT: 900MiB
       BIFROST_ENCRYPTION_KEY: ${BIFROST_ENCRYPTION_KEY}
+      BIFROST_SETUP_TOKEN: ${BIFROST_SETUP_TOKEN:-}
     expose:
       - "8080"
     networks:

@@ -2,10 +2,8 @@
 
 Lightweight server monitoring hub and agent for this repository.
 
-Beszel provides a web dashboard showing host and per-container CPU, memory,
-network, and disk statistics with historical charts and configurable alerts.
-It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the
-common "is everything alive and healthy?" use case.
+Beszel provides a web dashboard showing host and per-container CPU, memory, network, and disk statistics with historical charts and configurable alerts.
+It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common "is everything alive and healthy?" use case.
 
 ## What This Stack Contains
 
@@ -15,30 +13,22 @@ common "is everything alive and healthy?" use case.
 
 ## Current Design Choices
 
-- Hub and agent run on the same host and communicate through a shared Unix
-  socket (`./beszel_socket/beszel.sock`), following the official same-system
-  deployment pattern. The agent also maintains an outbound WebSocket to the
-  hub via `HUB_URL`.
+- Hub and agent run on the same host and communicate through a shared Unix socket (`./beszel_socket/beszel.sock`), following the official same-system deployment pattern.
+  The agent also maintains an outbound WebSocket to the hub via `HUB_URL`.
 - The agent uses `network_mode: host` to read host network-interface stats.
-  Because of this it cannot join Docker networks; container services are
-  reached through host loopback.
-- The hub publishes `127.0.0.1:8090` on loopback and joins `caddy-network`
-  for the reverse proxy.
-- The agent accesses Docker through a read-only socket proxy. The proxy exposes
-  only the container API on host loopback; the agent never receives the raw
-  Docker socket.
+  Because of this it cannot join Docker networks; container services are reached through host loopback.
+- The hub publishes `127.0.0.1:8090` on loopback and joins `caddy-network` for the reverse proxy.
+- The agent accesses Docker through a read-only socket proxy.
+  The proxy exposes only the container API on host loopback; the agent never receives the raw Docker socket.
 - Beszel checks for new releases and shows update notifications in the UI.
 
 ## Portability
 
-`compose.yaml` is tracked by Git and represents this repository's NVIDIA Linux
-host baseline. It contains the hub, agent, GPU, disk, S.M.A.R.T., and systemd
-service monitoring, healthchecks, and Docker socket proxy.
+`compose.yaml` is tracked by Git and represents this repository's NVIDIA Linux host baseline.
+It contains the hub, agent, GPU, disk, S.M.A.R.T., and systemd service monitoring, healthchecks, and Docker socket proxy.
 
-Some values are inherently host-specific (partition names, SMART devices,
-sensor exclusions, service patterns, extra filesystem paths). They live in
-`compose.yaml` because this repository doubles as a shared self-hosted
-configuration, but you will need to adjust them when deploying elsewhere.
+Some values are inherently host-specific (partition names, SMART devices, sensor exclusions, service patterns, extra filesystem paths).
+They live in `compose.yaml` because this repository doubles as a shared self-hosted configuration, but you will need to adjust them when deploying elsewhere.
 
 ## Prerequisites
 
@@ -46,8 +36,7 @@ configuration, but you will need to adjust them when deploying elsewhere.
 - Docker Compose v2
 - NVIDIA GPU and NVIDIA Container Toolkit
 - External Docker network `caddy-network`
-- External reverse proxy configuration that routes your Beszel domain to
-  `beszel:8090` on `caddy-network`
+- External reverse proxy configuration that routes your Beszel domain to `beszel:8090` on `caddy-network`
 
 Create the shared proxy network once if needed:
 
@@ -90,14 +79,13 @@ Required variables are documented in `.env.example`.
 | `BESZEL_AGENT_TOKEN` | Universal token from Hub Settings > Tokens |
 | `BESZEL_AGENT_KEY` | Public key from the "Add System" dialog |
 
-To auto-create the first admin account, add `USER_EMAIL` and `USER_PASSWORD`
-to the `beszel` service's `environment` block in `compose.yaml`.
+To auto-create the first admin account, add `USER_EMAIL` and `USER_PASSWORD` to the `beszel` service's `environment` block in `compose.yaml`.
 If omitted, the web UI will prompt you to create an account on first visit.
 
 ## Reverse Proxy
 
-This repository does not manage the top-level Caddy or reverse-proxy
-configuration. The expected upstream pattern is:
+This repository does not manage the top-level Caddy or reverse-proxy configuration.
+The expected upstream pattern is:
 
 ```caddy
 beszel.example.com {
@@ -112,13 +100,12 @@ beszel.example.com {
 }
 ```
 
-The `read_timeout 360s` is recommended by the Beszel docs for WebSocket
-connections.
+The `read_timeout 360s` is recommended by the Beszel docs for WebSocket connections.
 
 ## Notifications
 
-Beszel uses [Shoutrrr](https://github.com/nicholas-fedor/shoutrrr) URL
-schemas. Configure in the web UI under Settings > Notifications.
+Beszel uses [Shoutrrr](https://github.com/nicholas-fedor/shoutrrr) URL schemas.
+Configure in the web UI under Settings > Notifications.
 
 Common examples:
 
@@ -126,8 +113,7 @@ Common examples:
 - Discord: `discord://<token>@<channel-id>`
 - ntfy: `ntfy://:<access-token>@<host>/<topic>`
 
-Alerts and notification channels are UI-managed and therefore intentionally
-not encoded in Compose.
+Alerts and notification channels are UI-managed and therefore intentionally not encoded in Compose.
 
 ## Operations
 

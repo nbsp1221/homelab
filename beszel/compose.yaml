@@ -2,7 +2,7 @@ name: beszel
 
 services:
   beszel:
-    image: henrygd/beszel:0.18.7
+    image: henrygd/beszel:0.18.8
     container_name: beszel
     restart: unless-stopped
     init: true
@@ -25,7 +25,7 @@ services:
       start_period: 10s
 
   beszel-agent:
-    image: henrygd/beszel-agent-nvidia:0.18.7
+    image: henrygd/beszel-agent-nvidia:0.18.8
     container_name: beszel-agent
     restart: unless-stopped
     init: true
@@ -35,7 +35,7 @@ services:
       TOKEN: ${BESZEL_AGENT_TOKEN}
       HUB_URL: http://localhost:8090
       FILESYSTEM: nvme0n1p5
-      GPU_COLLECTOR: nvml
+      GPU_COLLECTOR: nvidia-smi
       # Ignore invalid readings from unused NCT6798 motherboard inputs.
       SENSORS: "-nct6798_systin,nct6798_auxtin*"
       SMART_DEVICES: /dev/nvme0:nvme,/dev/sda:sat

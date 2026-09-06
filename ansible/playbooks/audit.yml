@@ -9,7 +9,7 @@
         argv:
           - dpkg-query
           - --show
-          - --showformat=${Status}|${Version}
+          - --showformat=${db:Status-Status}|${Version}
           - docker-ce
       register: audit_docker_ce_package
       check_mode: false
@@ -94,5 +94,5 @@
           docker_ce_package: >-
             {{ [audit_docker_ce_package.stdout.split('|', 1)[1]]
                if audit_docker_ce_package.stdout
-                  is match('^install ok installed[|]') else [] }}
+                  is match('^installed[|]') else [] }}
           reboot_required: "{{ audit_reboot_required.stat.exists }}"

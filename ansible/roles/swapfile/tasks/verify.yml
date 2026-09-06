@@ -8,11 +8,9 @@
   ansible.builtin.command:
     argv:
       - /sbin/swapon
-      - --show
+      - --show=NAME
       - --noheadings
       - --raw
-      - --output
-      - NAME
   register: swapfile_final_active_devices
   changed_when: false
 

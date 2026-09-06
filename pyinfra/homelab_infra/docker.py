@@ -19,8 +19,9 @@ DOCKER_PACKAGES = (
     "docker-buildx-plugin",
     "docker-compose-plugin",
 )
+APT_UPDATE_ERROR_MODE_PATH = "/etc/apt/apt.conf.d/99homelab-update-error-mode"
+APT_UPDATE_ERROR_MODE = b'APT::Update::Error-Mode "any";\n'
 DOCKER_KEY_PATH = "/etc/apt/keyrings/docker.asc"
-DOCKER_REPOSITORY_UPDATE_COMMAND = "apt-get update -o APT::Update::Error-Mode=any"
 DOCKER_CONFLICTING_PACKAGES = frozenset(
     {
         "containerd",
@@ -75,6 +76,14 @@ def fetch_repository_key(url: str) -> BytesIO:
     return BytesIO(content)
 
 
+def docker_repository_refresh_cache_time(
+    configuration_changed: bool,
+) -> int:
+    if configuration_changed:
+        return 0
+    return 3600
+
+
 @deploy("Configure Docker Engine")
 def configure_docker() -> None:
     installed_packages = host.get_fact(DebPackages)
@@ -104,13 +113,19 @@ def configure_docker() -> None:
     except (OSError, ValueError) as error:
         raise DeployError(f"Could not fetch Docker signing key: {error}") from error
 
-    files.put(
+    apt_error_mode_result = files.put(
+        name="Make APT repository refreshes strict",
+        src=BytesIO(APT_UPDATE_ERROR_MODE),
+        dest=APT_UPDATE_ERROR_MODE_PATH,
+        mode="0644",
+    )
+    key_result = files.put(
         name="Install Docker's APT signing key",
         src=signing_key,
         dest=DOCKER_KEY_PATH,
         mode="0644",
     )
-    apt.sources_file(
+    repository_result = apt.sources_file(
         name="Configure Docker's official APT repository",
         filename="docker",
         uris=[repository.uri],
@@ -119,9 +134,15 @@ def configure_docker() -> None:
         architectures=[repository.architecture],
         signed_by=DOCKER_KEY_PATH,
     )
-    server.shell(
+    repository_configuration_changed = any(
+        result.will_change
+        for result in (apt_error_mode_result, key_result, repository_result)
+    )
+    apt.update(
         name="Refresh Docker repository metadata",
-        commands=DOCKER_REPOSITORY_UPDATE_COMMAND,
+        cache_time=docker_repository_refresh_cache_time(
+            repository_configuration_changed,
+        ),
     )
 
     upgradable_packages = host.get_fact(

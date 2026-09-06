@@ -3,10 +3,12 @@ from io import BytesIO
 import pytest
 
 from homelab_infra.docker import (
+    APT_UPDATE_ERROR_MODE,
+    APT_UPDATE_ERROR_MODE_PATH,
     DOCKER_KEY_PATH,
     DOCKER_PACKAGES,
-    DOCKER_REPOSITORY_UPDATE_COMMAND,
     docker_repository,
+    docker_repository_refresh_cache_time,
     fetch_repository_key,
     installed_conflicts,
 )
@@ -70,9 +72,27 @@ def test_docker_repository_rejects_unsupported_distribution() -> None:
         docker_repository("Fedora", "42", "x86_64")
 
 
-def test_docker_repository_refresh_fails_on_any_apt_error() -> None:
-    assert DOCKER_REPOSITORY_UPDATE_COMMAND == (
-        "apt-get update -o APT::Update::Error-Mode=any"
+def test_docker_repository_refresh_uses_strict_apt_configuration() -> None:
+    assert APT_UPDATE_ERROR_MODE_PATH == (
+        "/etc/apt/apt.conf.d/99homelab-update-error-mode"
+    )
+    assert APT_UPDATE_ERROR_MODE == b'APT::Update::Error-Mode "any";\n'
+
+
+@pytest.mark.parametrize(
+    ("configuration_changed", "expected_cache_time"),
+    [
+        (True, 0),
+        (False, 3600),
+    ],
+)
+def test_docker_repository_refresh_cache_time(
+    configuration_changed: bool,
+    expected_cache_time: int,
+) -> None:
+    assert (
+        docker_repository_refresh_cache_time(configuration_changed)
+        == expected_cache_time
     )
 
 

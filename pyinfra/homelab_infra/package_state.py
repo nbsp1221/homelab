@@ -17,12 +17,15 @@ def _apt_names(output: str | None, *, repository_suffix: bool) -> set[str]:
     return names
 
 
-def packages_need_upgrade(
+def packages_to_upgrade(
     upgradable_output: str | None,
     held_output: str | None,
     package_names: Iterable[str],
-) -> bool:
-    managed = set(package_names)
+) -> tuple[str, ...]:
     upgradable = _apt_names(upgradable_output, repository_suffix=True)
     held = _apt_names(held_output, repository_suffix=False)
-    return bool((managed & upgradable) - held)
+    return tuple(
+        package
+        for package in package_names
+        if package in upgradable and package not in held
+    )

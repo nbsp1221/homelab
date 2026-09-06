@@ -1,14 +1,16 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from io import BytesIO
+from urllib.request import urlopen
 
 from pyinfra import host
 from pyinfra.api import deploy
 from pyinfra.api.exceptions import DeployError
 from pyinfra.facts.deb import DebPackages
 from pyinfra.facts.server import Arch, Command, LinuxDistribution
-from pyinfra.operations import apt, server, systemd
+from pyinfra.operations import apt, files, server, systemd
 
-from homelab_infra.package_state import packages_need_upgrade
+from homelab_infra.package_state import packages_to_upgrade
 
 DOCKER_PACKAGES = (
     "docker-ce",
@@ -17,6 +19,7 @@ DOCKER_PACKAGES = (
     "docker-buildx-plugin",
     "docker-compose-plugin",
 )
+DOCKER_KEY_PATH = "/etc/apt/keyrings/docker.asc"
 DOCKER_CONFLICTING_PACKAGES = frozenset(
     {
         "containerd",
@@ -63,6 +66,14 @@ def installed_conflicts(installed_packages: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted(DOCKER_CONFLICTING_PACKAGES & set(installed_packages)))
 
 
+def fetch_repository_key(url: str) -> BytesIO:
+    with urlopen(url, timeout=30) as response:
+        content = response.read()
+    if not content.startswith(b"-----BEGIN PGP PUBLIC KEY BLOCK-----"):
+        raise ValueError("Docker signing key is not an ASCII-armored OpenPGP key")
+    return BytesIO(content)
+
+
 @deploy("Configure Docker Engine")
 def configure_docker() -> None:
     installed_packages = host.get_fact(DebPackages)
@@ -87,10 +98,16 @@ def configure_docker() -> None:
     except ValueError as error:
         raise DeployError(str(error)) from error
 
-    key_result = apt.key(
+    try:
+        signing_key = fetch_repository_key(repository.key_uri)
+    except (OSError, ValueError) as error:
+        raise DeployError(f"Could not fetch Docker signing key: {error}") from error
+
+    key_result = files.put(
         name="Install Docker's APT signing key",
-        src=repository.key_uri,
-        dest="docker.gpg",
+        src=signing_key,
+        dest=DOCKER_KEY_PATH,
+        mode="0644",
     )
     repository_result = apt.sources_file(
         name="Configure Docker's official APT repository",
@@ -99,7 +116,7 @@ def configure_docker() -> None:
         suites=[repository.suite],
         components=["stable"],
         architectures=[repository.architecture],
-        signed_by="/etc/apt/keyrings/docker.gpg",
+        signed_by=DOCKER_KEY_PATH,
     )
 
     if key_result.will_change or repository_result.will_change:
@@ -113,18 +130,25 @@ def configure_docker() -> None:
         Command,
         command="apt-mark showhold 2>/dev/null || true",
     )
+    upgrade_packages = packages_to_upgrade(
+        upgradable_packages,
+        held_packages,
+        DOCKER_PACKAGES,
+    )
     apt.packages(
         name="Install current Docker Engine and Compose",
         packages=list(DOCKER_PACKAGES),
         present=True,
-        latest=packages_need_upgrade(
-            upgradable_packages,
-            held_packages,
-            DOCKER_PACKAGES,
-        ),
         update=True,
         cache_time=3600,
     )
+    if upgrade_packages:
+        apt.packages(
+            name="Upgrade current non-held Docker packages",
+            packages=list(upgrade_packages),
+            present=True,
+            latest=True,
+        )
     systemd.service(
         name="Enable and start Docker Engine",
         service="docker",

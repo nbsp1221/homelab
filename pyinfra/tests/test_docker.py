@@ -1,8 +1,12 @@
+from io import BytesIO
+
 import pytest
 
 from homelab_infra.docker import (
+    DOCKER_KEY_PATH,
     DOCKER_PACKAGES,
     docker_repository,
+    fetch_repository_key,
     installed_conflicts,
 )
 
@@ -63,6 +67,33 @@ def test_docker_repository_mapping(
 def test_docker_repository_rejects_unsupported_distribution() -> None:
     with pytest.raises(ValueError, match="Debian and Ubuntu"):
         docker_repository("Fedora", "42", "x86_64")
+
+
+def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None:
+    content = b"-----BEGIN PGP PUBLIC KEY BLOCK-----\nkey\n"
+    requests: list[tuple[str, int]] = []
+
+    def open_key(url: str, timeout: int) -> BytesIO:
+        requests.append((url, timeout))
+        return BytesIO(content)
+
+    monkeypatch.setattr("homelab_infra.docker.urlopen", open_key)
+
+    key_file = fetch_repository_key("https://download.docker.com/linux/debian/gpg")
+
+    assert key_file.read() == content
+    assert requests == [("https://download.docker.com/linux/debian/gpg", 30)]
+    assert DOCKER_KEY_PATH == "/etc/apt/keyrings/docker.asc"
+
+
+def test_repository_key_rejects_an_invalid_response(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "homelab_infra.docker.urlopen",
+        lambda _url, timeout: BytesIO(b"not a signing key"),
+    )
+
+    with pytest.raises(ValueError, match="ASCII-armored OpenPGP"):
+        fetch_repository_key("https://download.docker.com/linux/debian/gpg")
 
 
 def test_conflicting_packages_are_sorted_and_deduplicated() -> None:

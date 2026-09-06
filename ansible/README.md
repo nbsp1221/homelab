@@ -17,27 +17,29 @@ secrets are outside the initial baseline.
 
 ## Controller setup
 
-Use Python 3.12 or newer on `retn0-srv-main`:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) on
+`retn0-srv-main`, then synchronize the locked Python 3.12 environment:
 
 ```bash
 cd /home/retn0/deploy/homelab/ansible
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv sync --locked
 ```
 
-The `.venv` directory is local runtime state and must not be committed.
+uv selects Python from `.python-version`, creates `.venv`, and installs the
+exact dependency graph recorded in `uv.lock`. The `.venv` directory is local
+runtime state and must not be committed.
 
 ## Validation
 
 Run commands from this directory:
 
 ```bash
-.venv/bin/ansible-inventory --graph
-.venv/bin/ansible-playbook playbooks/bootstrap.yml --syntax-check
-.venv/bin/ansible-playbook playbooks/audit.yml --syntax-check
-.venv/bin/ansible-playbook playbooks/site.yml --syntax-check
-.venv/bin/ansible-playbook playbooks/maintenance.yml --syntax-check
-.venv/bin/ansible-lint .
+uv run ansible-inventory --graph
+uv run ansible-playbook playbooks/bootstrap.yml --syntax-check
+uv run ansible-playbook playbooks/audit.yml --syntax-check
+uv run ansible-playbook playbooks/site.yml --syntax-check
+uv run ansible-playbook playbooks/maintenance.yml --syntax-check
+uv run ansible-lint .
 ```
 
 ## Operation
@@ -45,7 +47,7 @@ Run commands from this directory:
 Bootstrap a new Debian or Ubuntu host before its first audit or preview:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/bootstrap.yml \
+uv run ansible-playbook playbooks/bootstrap.yml \
   --limit retn0-srv-gcp-01
 ```
 
@@ -55,29 +57,42 @@ and is safe to run again.
 Audit without making changes:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/audit.yml
+uv run ansible-playbook playbooks/audit.yml
 ```
 
 Preview the baseline against one host:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/site.yml \
+uv run ansible-playbook playbooks/site.yml \
   --check --diff --limit retn0-srv-gcp-01
 ```
 
 Apply the baseline to one host:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/site.yml \
+uv run ansible-playbook playbooks/site.yml \
   --limit retn0-srv-gcp-01
 ```
 
 Apply explicit package maintenance:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/maintenance.yml \
+uv run ansible-playbook playbooks/maintenance.yml \
   --limit retn0-srv-gcp-01
 ```
 
 `site.yml` does not perform a system-wide package upgrade or reboot a host.
 Run it twice after a change; the second run should report `changed=0`.
+
+## Updating controller dependencies
+
+Change version constraints in `pyproject.toml`, then deliberately refresh and
+verify the lockfile:
+
+```bash
+uv lock --upgrade
+uv sync --locked
+uv run ansible-lint .
+```
+
+Commit `pyproject.toml` and `uv.lock` together.

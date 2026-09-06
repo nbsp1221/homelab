@@ -34,6 +34,7 @@
       - "^{{ swapfile_path | regex_escape }}[[:space:]]"
       - /etc/fstab
   register: swapfile_initial_fstab
+  check_mode: false
   changed_when: false
   failed_when: swapfile_initial_fstab.rc not in [0, 1]
   when: swapfile_enabled | bool
@@ -99,6 +100,7 @@
       - --output
       - NAME
   register: swapfile_active_devices
+  check_mode: false
   changed_when: false
   when: swapfile_enabled | bool
 

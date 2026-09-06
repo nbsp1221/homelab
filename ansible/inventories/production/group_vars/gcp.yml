@@ -1,0 +1,4 @@
+---
+ansible_user: retn0
+docker_engine_users:
+  - retn0

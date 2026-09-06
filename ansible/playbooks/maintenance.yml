@@ -1,0 +1,31 @@
+---
+- name: Maintain managed host packages
+  hosts: managed_hosts
+  become: true
+  serial: 1
+
+  tasks:
+    - name: Upgrade installed packages safely
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: safe
+
+    - name: Remove unused package dependencies
+      ansible.builtin.apt:
+        autoremove: true
+        purge: true
+
+    - name: Clean the package cache
+      ansible.builtin.apt:
+        clean: true
+
+    - name: Check whether a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: maintenance_reboot_required
+
+    - name: Report reboot requirement
+      ansible.builtin.debug:
+        msg: >-
+          Reboot required: {{ maintenance_reboot_required.stat.exists }}.
+          This playbook never reboots hosts automatically.

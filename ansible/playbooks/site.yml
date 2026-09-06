@@ -1,0 +1,9 @@
+---
+- name: Configure managed hosts
+  hosts: managed_hosts
+  become: true
+  gather_facts: true
+  serial: 1
+
+  roles:
+    - system_base

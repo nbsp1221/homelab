@@ -32,8 +32,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-  ansible-lint:
-    name: Ansible lint
+  pyinfra:
+    name: pyinfra
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -46,28 +46,34 @@ jobs:
         with:
           version: "0.12.10"
           enable-cache: true
-          cache-dependency-glob: ansible/uv.lock
+          cache-dependency-glob: pyinfra/uv.lock
 
       - name: Set up Python
-        working-directory: ansible
+        working-directory: pyinfra
         run: uv python install
 
-      - name: Synchronize Ansible tooling
-        working-directory: ansible
+      - name: Synchronize pyinfra tooling
+        working-directory: pyinfra
         run: uv sync --locked
 
+      - name: Test
+        working-directory: pyinfra
+        run: uv run pytest
+
+      - name: Lint
+        working-directory: pyinfra
+        run: uv run ruff check .
+
+      - name: Check formatting
+        working-directory: pyinfra
+        run: uv run ruff format --check .
+
+      - name: Compile Python
+        working-directory: pyinfra
+        run: >-
+          uv run python -m compileall -q
+          deploys group_data homelab_infra inventories tests
+
       - name: Validate inventory
-        working-directory: ansible
-        run: uv run ansible-inventory --graph
-
-      - name: Validate playbook syntax
-        working-directory: ansible
-        run: |
-          uv run ansible-playbook playbooks/bootstrap.yml --syntax-check
-          uv run ansible-playbook playbooks/audit.yml --syntax-check
-          uv run ansible-playbook playbooks/site.yml --syntax-check
-          uv run ansible-playbook playbooks/maintenance.yml --syntax-check
-
-      - name: Lint Ansible project
-        working-directory: ansible
-        run: uv run ansible-lint .
+        working-directory: pyinfra
+        run: uv run pyinfra inventories/production.py debug-inventory

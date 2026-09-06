@@ -40,12 +40,12 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 
 ## Infrastructure Automation
 
-The [`ansible/`](ansible/) project manages the baseline configuration of the
+The [`pyinfra/`](pyinfra/) project manages the baseline configuration of the
 GCP and OCI Linux hosts over Tailscale SSH. It currently covers host auditing,
 base packages, a disk-backed swap file, Docker Engine, and explicit package
 maintenance.
 
-Ansible runs from `retn0-srv-main`. See [`ansible/README.md`](ansible/README.md)
+pyinfra runs from `retn0-srv-main`. See [`pyinfra/README.md`](pyinfra/README.md)
 for setup, validation, and operation instructions.
 
 ## Quick Start

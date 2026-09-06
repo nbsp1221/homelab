@@ -6,7 +6,7 @@ Tailscale SSH.
 
 ## Scope
 
-- Audit existing Debian and Ubuntu hosts.
+- Bootstrap and audit existing Debian and Ubuntu hosts.
 - Install the small package set required by the baseline.
 - Maintain a 2 GiB disk-backed swap file.
 - Install Docker Engine and Docker Compose from Docker's official repository.
@@ -33,6 +33,7 @@ Run commands from this directory:
 
 ```bash
 .venv/bin/ansible-inventory --graph
+.venv/bin/ansible-playbook playbooks/bootstrap.yml --syntax-check
 .venv/bin/ansible-playbook playbooks/audit.yml --syntax-check
 .venv/bin/ansible-playbook playbooks/site.yml --syntax-check
 .venv/bin/ansible-playbook playbooks/maintenance.yml --syntax-check
@@ -40,6 +41,16 @@ Run commands from this directory:
 ```
 
 ## Operation
+
+Bootstrap a new Debian or Ubuntu host before its first audit or preview:
+
+```bash
+.venv/bin/ansible-playbook playbooks/bootstrap.yml \
+  --limit retn0-srv-gcp-01
+```
+
+The bootstrap play installs only the Python bindings required by the baseline
+and is safe to run again.
 
 Audit without making changes:
 

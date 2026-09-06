@@ -58,6 +58,7 @@ jobs:
       - name: Validate playbook syntax
         working-directory: ansible
         run: |
+          ansible-playbook playbooks/bootstrap.yml --syntax-check
           ansible-playbook playbooks/audit.yml --syntax-check
           ansible-playbook playbooks/site.yml --syntax-check
           ansible-playbook playbooks/maintenance.yml --syntax-check

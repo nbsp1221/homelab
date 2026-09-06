@@ -53,6 +53,21 @@
   register: docker_engine_repository
   notify: Refresh Docker APT cache
 
+- name: Report deferred Docker package preview
+  ansible.builtin.debug:
+    msg: >-
+      Docker's APT repository would be created. Package installation and
+      service changes are deferred until the repository exists in a real run.
+  when:
+    - ansible_check_mode
+    - docker_engine_repository is changed
+
+- name: Defer Docker package work until the repository exists
+  ansible.builtin.meta: end_role
+  when:
+    - ansible_check_mode
+    - docker_engine_repository is changed
+
 - name: Refresh repository metadata before package installation
   ansible.builtin.meta: flush_handlers
 

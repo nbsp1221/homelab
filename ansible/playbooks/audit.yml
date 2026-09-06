@@ -4,9 +4,17 @@
   gather_facts: true
 
   tasks:
-    - name: Gather installed package facts
-      ansible.builtin.package_facts:
-        manager: auto
+    - name: Read the Docker CE package version
+      ansible.builtin.command:
+        argv:
+          - dpkg-query
+          - --show
+          - --showformat=${Version}
+          - docker-ce
+      register: audit_docker_ce_package
+      check_mode: false
+      changed_when: false
+      failed_when: audit_docker_ce_package.rc not in [0, 1]
 
     - name: Read active swap devices
       ansible.builtin.command:
@@ -83,5 +91,7 @@
           docker_version: "{{ audit_docker_version.stdout | default('unavailable', true) }}"
           compose_version: "{{ audit_compose_version.stdout | default('unavailable', true) }}"
           docker_service: "{{ ansible_facts.services.get('docker.service', {}).get('state', 'unavailable') }}"
-          docker_ce_package: "{{ ansible_facts.packages.get('docker-ce', []) | map(attribute='version') | list }}"
+          docker_ce_package: >-
+            {{ [audit_docker_ce_package.stdout]
+               if audit_docker_ce_package.rc == 0 else [] }}
           reboot_required: "{{ audit_reboot_required.stat.exists }}"

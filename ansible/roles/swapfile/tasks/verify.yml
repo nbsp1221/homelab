@@ -19,7 +19,7 @@
     argv:
       - grep
       - -E
-      - "^{{ swapfile_path | regex_escape }}[[:space:]]"
+      - "^[[:space:]]*{{ swapfile_path | regex_escape }}[[:space:]]"
       - /etc/fstab
   register: swapfile_final_fstab
   changed_when: false

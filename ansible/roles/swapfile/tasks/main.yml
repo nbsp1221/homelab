@@ -74,6 +74,7 @@
     argv:
       - /sbin/mkswap
       - "{{ swapfile_path }}"
+  changed_when: true
   when:
     - swapfile_enabled | bool
     - swapfile_allocation is changed
@@ -106,6 +107,7 @@
     argv:
       - /sbin/swapon
       - "{{ swapfile_path }}"
+  changed_when: true
   when:
     - swapfile_enabled | bool
     - swapfile_path not in swapfile_active_devices.stdout_lines

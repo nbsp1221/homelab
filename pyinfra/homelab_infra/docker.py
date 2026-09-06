@@ -20,6 +20,7 @@ DOCKER_PACKAGES = (
     "docker-compose-plugin",
 )
 DOCKER_KEY_PATH = "/etc/apt/keyrings/docker.asc"
+DOCKER_REPOSITORY_UPDATE_COMMAND = "apt-get update -o APT::Update::Error-Mode=any"
 DOCKER_CONFLICTING_PACKAGES = frozenset(
     {
         "containerd",
@@ -103,13 +104,13 @@ def configure_docker() -> None:
     except (OSError, ValueError) as error:
         raise DeployError(f"Could not fetch Docker signing key: {error}") from error
 
-    key_result = files.put(
+    files.put(
         name="Install Docker's APT signing key",
         src=signing_key,
         dest=DOCKER_KEY_PATH,
         mode="0644",
     )
-    repository_result = apt.sources_file(
+    apt.sources_file(
         name="Configure Docker's official APT repository",
         filename="docker",
         uris=[repository.uri],
@@ -118,9 +119,10 @@ def configure_docker() -> None:
         architectures=[repository.architecture],
         signed_by=DOCKER_KEY_PATH,
     )
-
-    if key_result.will_change or repository_result.will_change:
-        apt.update(name="Refresh Docker repository metadata", cache_time=0)
+    server.shell(
+        name="Refresh Docker repository metadata",
+        commands=DOCKER_REPOSITORY_UPDATE_COMMAND,
+    )
 
     upgradable_packages = host.get_fact(
         Command,
@@ -139,8 +141,6 @@ def configure_docker() -> None:
         name="Install current Docker Engine and Compose",
         packages=list(DOCKER_PACKAGES),
         present=True,
-        update=True,
-        cache_time=3600,
     )
     if upgrade_packages:
         apt.packages(

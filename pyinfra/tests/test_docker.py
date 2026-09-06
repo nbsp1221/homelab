@@ -5,6 +5,7 @@ import pytest
 from homelab_infra.docker import (
     DOCKER_KEY_PATH,
     DOCKER_PACKAGES,
+    DOCKER_REPOSITORY_UPDATE_COMMAND,
     docker_repository,
     fetch_repository_key,
     installed_conflicts,
@@ -67,6 +68,12 @@ def test_docker_repository_mapping(
 def test_docker_repository_rejects_unsupported_distribution() -> None:
     with pytest.raises(ValueError, match="Debian and Ubuntu"):
         docker_repository("Fedora", "42", "x86_64")
+
+
+def test_docker_repository_refresh_fails_on_any_apt_error() -> None:
+    assert DOCKER_REPOSITORY_UPDATE_COMMAND == (
+        "apt-get update -o APT::Update::Error-Mode=any"
+    )
 
 
 def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None:

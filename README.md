@@ -14,6 +14,7 @@ provisioning, and cluster configuration.
 - [🏠 Homelab](#-homelab)
   - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
+  - [Infrastructure Automation](#infrastructure-automation)
   - [Quick Start](#quick-start)
   - [Services](#services)
     - [Maintained Services](#maintained-services)
@@ -36,6 +37,16 @@ One time setup:
 ```bash
 docker network inspect caddy-network >/dev/null 2>&1 || docker network create caddy-network
 ```
+
+## Infrastructure Automation
+
+The [`ansible/`](ansible/) project manages the baseline configuration of the
+GCP and OCI Linux hosts over Tailscale SSH. It currently covers host auditing,
+base packages, a disk-backed swap file, Docker Engine, and explicit package
+maintenance.
+
+Ansible runs from `retn0-srv-main`. See [`ansible/README.md`](ansible/README.md)
+for setup, validation, and operation instructions.
 
 ## Quick Start
 

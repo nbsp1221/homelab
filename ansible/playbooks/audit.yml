@@ -9,7 +9,7 @@
         argv:
           - dpkg-query
           - --show
-          - --showformat=${Version}
+          - --showformat=${Status}|${Version}
           - docker-ce
       register: audit_docker_ce_package
       check_mode: false
@@ -92,6 +92,7 @@
           compose_version: "{{ audit_compose_version.stdout | default('unavailable', true) }}"
           docker_service: "{{ ansible_facts.services.get('docker.service', {}).get('state', 'unavailable') }}"
           docker_ce_package: >-
-            {{ [audit_docker_ce_package.stdout]
-               if audit_docker_ce_package.rc == 0 else [] }}
+            {{ [audit_docker_ce_package.stdout.split('|', 1)[1]]
+               if audit_docker_ce_package.stdout
+                  is match('^install ok installed[|]') else [] }}
           reboot_required: "{{ audit_reboot_required.stat.exists }}"

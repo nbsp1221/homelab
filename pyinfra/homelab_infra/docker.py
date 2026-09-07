@@ -76,10 +76,19 @@ def fetch_repository_key(url: str) -> BytesIO:
     return BytesIO(content)
 
 
+def docker_package_candidate_available(policy: str) -> bool:
+    for line in policy.splitlines():
+        field, separator, value = line.strip().partition(":")
+        if separator and field == "Candidate":
+            return value.strip() != "(none)"
+    return False
+
+
 def docker_repository_refresh_cache_time(
     configuration_changed: bool,
+    package_candidate_available: bool,
 ) -> int:
-    if configuration_changed:
+    if configuration_changed or not package_candidate_available:
         return 0
     return 3600
 
@@ -138,10 +147,15 @@ def configure_docker() -> None:
         result.will_change
         for result in (apt_error_mode_result, key_result, repository_result)
     )
+    package_policy = host.get_fact(
+        Command,
+        command="apt-cache policy docker-ce 2>/dev/null || true",
+    )
     apt.update(
         name="Refresh Docker repository metadata",
         cache_time=docker_repository_refresh_cache_time(
             repository_configuration_changed,
+            docker_package_candidate_available(package_policy),
         ),
     )
 

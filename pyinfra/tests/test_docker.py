@@ -7,6 +7,7 @@ from homelab_infra.docker import (
     APT_UPDATE_ERROR_MODE_PATH,
     DOCKER_KEY_PATH,
     DOCKER_PACKAGES,
+    docker_package_candidate_available,
     docker_repository,
     docker_repository_refresh_cache_time,
     fetch_repository_key,
@@ -80,20 +81,44 @@ def test_docker_repository_refresh_uses_strict_apt_configuration() -> None:
 
 
 @pytest.mark.parametrize(
-    ("configuration_changed", "expected_cache_time"),
+    (
+        "configuration_changed",
+        "package_candidate_available",
+        "expected_cache_time",
+    ),
     [
-        (True, 0),
-        (False, 3600),
+        (True, True, 0),
+        (False, False, 0),
+        (False, True, 3600),
     ],
 )
 def test_docker_repository_refresh_cache_time(
     configuration_changed: bool,
+    package_candidate_available: bool,
     expected_cache_time: int,
 ) -> None:
     assert (
-        docker_repository_refresh_cache_time(configuration_changed)
+        docker_repository_refresh_cache_time(
+            configuration_changed,
+            package_candidate_available,
+        )
         == expected_cache_time
     )
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [
+        ("docker-ce:\n  Candidate: 5:29.0.0-1~debian.12~bookworm\n", True),
+        ("docker-ce:\n  Candidate: (none)\n", False),
+        ("", False),
+    ],
+)
+def test_docker_package_candidate_availability(
+    policy: str,
+    expected: bool,
+) -> None:
+    assert docker_package_candidate_available(policy) is expected
 
 
 def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None:

@@ -5,22 +5,8 @@ from inventories.production import gcp, oci
 
 
 def test_production_inventory_contains_the_three_tailscale_hosts() -> None:
-    assert gcp == [
-        (
-            "retn0-srv-gcp-01",
-            {"ssh_hostname": "100.80.30.12"},
-        ),
-    ]
-    assert oci == [
-        (
-            "retn0-srv-oci-01",
-            {"ssh_hostname": "100.80.30.10"},
-        ),
-        (
-            "retn0-srv-oci-02",
-            {"ssh_hostname": "100.80.30.11"},
-        ),
-    ]
+    assert gcp == ["retn0-srv-gcp-01"]
+    assert oci == ["retn0-srv-oci-01", "retn0-srv-oci-02"]
 
 
 def test_group_data_expresses_shared_and_provider_specific_intent() -> None:

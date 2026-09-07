@@ -1,17 +1,3 @@
-gcp = [
-    (
-        "retn0-srv-gcp-01",
-        {"ssh_hostname": "100.80.30.12"},
-    ),
-]
+gcp = ["retn0-srv-gcp-01"]
 
-oci = [
-    (
-        "retn0-srv-oci-01",
-        {"ssh_hostname": "100.80.30.10"},
-    ),
-    (
-        "retn0-srv-oci-02",
-        {"ssh_hostname": "100.80.30.11"},
-    ),
-]
+oci = ["retn0-srv-oci-01", "retn0-srv-oci-02"]

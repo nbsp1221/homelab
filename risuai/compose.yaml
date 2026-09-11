@@ -2,13 +2,13 @@ name: risuai
 
 services:
   risuai-api-proxy:
+    image: risuai-api-proxy:latest
     build:
       context: ./api-proxy
       dockerfile: Dockerfile
-    image: risuai-api-proxy:latest
     container_name: risuai-api-proxy
-    restart: unless-stopped
     init: true
+    restart: unless-stopped
     environment:
       API_PROXY_TOKEN: "${API_PROXY_TOKEN}"
     expose:
@@ -23,21 +23,22 @@ services:
       start_period: 10s
 
   risuai:
+    image: risuai-self-hosted:latest
     build:
       context: .
       dockerfile: Dockerfile
-    image: risuai-self-hosted:latest
     container_name: risuai
-    restart: unless-stopped
     init: true
+    restart: unless-stopped
     environment:
+      PROXY_STREAM_ALLOWED_HOSTS: "risuai-api-proxy"
       TRUST_PROXY: "1"
     expose:
       - "6001"
-    volumes:
-      - ./save:/app/save
     networks:
       - caddy-network
+    volumes:
+      - ./save:/app/save
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6001/manifest.json').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s

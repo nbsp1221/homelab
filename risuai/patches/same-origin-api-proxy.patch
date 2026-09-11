@@ -1,0 +1,47 @@
+diff --git a/src/ts/plugins/apiV3/v3.svelte.ts b/src/ts/plugins/apiV3/v3.svelte.ts
+--- a/src/ts/plugins/apiV3/v3.svelte.ts
++++ b/src/ts/plugins/apiV3/v3.svelte.ts
+@@ -634,6 +634,27 @@ const authorizationHeaders = [
+     'proxy-authorization',
+ ]
+
++const sameOriginApiProxyHosts = new Set([
++    'risuai.retn0.kr',
++    'risuai.retn0.dev',
++])
++
++const normalizePluginFetchUrl = (url: string) => {
++    try {
++        const parsed = new URL(url, window.location.href)
++        const isApiProxyPath = parsed.pathname === '/api-proxy' || parsed.pathname.startsWith('/api-proxy/')
++        if(sameOriginApiProxyHosts.has(parsed.hostname) && isApiProxyPath){
++            return new URL(
++                `${parsed.pathname}${parsed.search}${parsed.hash}`,
++                window.location.origin
++            ).href
++        }
++    } catch {
++        // Preserve the existing fetch error for malformed URLs.
++    }
++    return url
++}
++
+ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
+
+     const oldApis = getV2PluginAPIs();
+@@ -641,6 +662,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
+
+         //Old APIs from v2.1
+         risuFetch: (url, options) => {
++            url = normalizePluginFetchUrl(url)
+             console.error(`[DEPRECATION WARNING] risuFetch is deprecated and will be removed in future versions. Please use nativeFetch instead.`)
+             for(const blocked of urlBlacklist){
+                 if(url.toLowerCase().includes(blocked)){
+@@ -658,6 +680,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
+             return oldApis.risuFetch(url, options);
+         },
+         nativeFetch: (url, options) => {
++            url = normalizePluginFetchUrl(url)
+             for(const blocked of urlBlacklist){
+                 if(url.toLowerCase().includes(blocked)){
+                     throw new Error(`Requests to ${blocked} are blocked for security reasons.`);

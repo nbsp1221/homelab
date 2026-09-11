@@ -1,0 +1,4 @@
+# Patches are applied in order by apply-patches.sh.
+reroll-persistence.patch
+same-origin-api-proxy.patch
+mobile-background-stream.patch

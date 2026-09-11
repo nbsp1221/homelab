@@ -1,0 +1,313 @@
+diff --git a/src/lib/ChatScreens/Chat.svelte b/src/lib/ChatScreens/Chat.svelte
+index e9c921bf..b00f4aa1 100644
+--- a/src/lib/ChatScreens/Chat.svelte
++++ b/src/lib/ChatScreens/Chat.svelte
+@@ -17,7 +17,7 @@
+     import { language } from "../../lang"
+     import { alertClear, alertConfirm, alertInput, alertNormal, alertRequestData, alertWait } from "../../ts/alert"
+     import { ParseMarkdown, type CbsConditions, type simpleCharacterArgument } from "../../ts/parser/parser.svelte"
+-    import { getCurrentCharacter, getCurrentChat, setCurrentChat, type MessageGenerationInfo, type StreamingDisplayOptimizationMode } from "../../ts/storage/database.svelte"
++    import { getCurrentCharacter, getCurrentChat, setCurrentChat, type Message, type MessageGenerationInfo, type StreamingDisplayOptimizationMode } from "../../ts/storage/database.svelte"
+     import { selectedCharID } from "../../ts/stores.svelte"
+     import { HideIconStore, ReloadGUIPointer, selIdState } from "../../ts/stores.svelte"
+     import AutoresizeArea from "../UI/GUI/TextAreaResizable.svelte"
+@@ -326,6 +326,11 @@
+
+         chat.bookmarks = [...chat.bookmarks];
+     }
++
++    function stripRerollStateFromMessage(message: Message): Message {
++        const { swipes, swipeId, ...rest } = message
++        return rest
++    }
+ </script>
+
+
+@@ -799,7 +804,7 @@
+             <button class="flex items-center hover:text-blue-500 transition-colors button-icon-unreroll" class:dyna-icon={rerollIcon === 'dynamic'} onclick={unReroll}>
+                 <ArrowLeft size={22}/>
+             </button>
+-            {#if firstMessage && DBState.db.swipe && DBState.db.showFirstMessagePages}
++            {#if (firstMessage && DBState.db.swipe && DBState.db.showFirstMessagePages) || (!firstMessage && totalPages > 1)}
+                 <span class="flex items-center text-xs text-textcolor2">{currentPage}/{totalPages}</span>
+             {/if}
+             <button class="flex items-center hover:text-blue-500 transition-colors button-icon-reroll" class:dyna-icon={rerollIcon === 'dynamic'} onclick={onReroll}>
+@@ -846,7 +851,7 @@
+         const newChat = $state.snapshot(currentChat)
+         newChat.name = createChatCopyName(newChat.name, 'Branch')
+         newChat.id = v4()
+-        newChat.message = newChat.message.slice(0, idx + 1)
++        newChat.message = newChat.message.slice(0, idx + 1).map(stripRerollStateFromMessage)
+         newChat.message.push({
+             role: 'char',
+             data: '{{specialcomment::branchedfrom::' + currentChat.id + '::' + currentChat.name + '::' + currentMessage.chatId + '::}}',
+diff --git a/src/lib/ChatScreens/Chats.svelte b/src/lib/ChatScreens/Chats.svelte
+index 6b423554..e7222392 100644
+--- a/src/lib/ChatScreens/Chats.svelte
++++ b/src/lib/ChatScreens/Chats.svelte
+@@ -97,7 +97,7 @@
+             const reloadPointer = reloadPointerMap[i] ?? 0;
+             const activeStreamingMessage = i === activeStreamingIndex && message.role === 'char';
+             const hashMessageData = activeStreamingMessage ? '' : message.data;
+-            let hashd = hashMessageData + (message.chatId ?? '') + i.toString() + messageLargePortrait.toString() + message.disabled?.toString() + reloadPointer.toString();
++            let hashd = hashMessageData + (message.chatId ?? '') + i.toString() + messageLargePortrait.toString() + message.disabled?.toString() + (message.swipeId ?? '').toString() + (message.swipes?.length ?? '').toString() + reloadPointer.toString();
+             const currentHash = hashCode(hashd);
+             currentHashes.add(currentHash);
+             if(!hashes.has(currentHash)){
+@@ -115,6 +115,8 @@
+                         onReroll: onReroll,
+                         unReroll: unReroll,
+                         rerollIcon: 'dynamic',
++                        currentPage: (message.swipeId ?? 0) + 1,
++                        totalPages: message.swipes?.length ?? 1,
+                         character: simpleChar,
+                         largePortrait: message.role === 'user' ? (userIconPortrait ?? false) : ((currentCharacter as character).largePortrait ?? false),
+                         messageGenerationInfo: message.generationInfo,
+diff --git a/src/lib/ChatScreens/DefaultChatScreen.svelte b/src/lib/ChatScreens/DefaultChatScreen.svelte
+index ca554ca2..6793a4e4 100644
+--- a/src/lib/ChatScreens/DefaultChatScreen.svelte
++++ b/src/lib/ChatScreens/DefaultChatScreen.svelte
+@@ -46,8 +46,6 @@
+     let openMenu = $state(false)
+     let loadPages = $state(getInitialChatLoadPages(DBState.db))
+     let autoMode = $state(false)
+-    let rerolls:Message[][] = []
+-    let rerollid = -1
+     let lastCharId = -1
+     let doingChatInputTranslate = false
+     let toggleStickers:boolean = $state(false)
+@@ -146,10 +144,6 @@
+         if($doingChat){
+             return
+         }
+-        if(lastCharId !== $selectedCharID){
+-            rerolls = []
+-            rerollid = -1
+-        }
+
+         let cha = DBState.db.characters[selectedChar].chats[DBState.db.characters[selectedChar].chatPage].message
+
+@@ -208,21 +202,93 @@
+         messageInput = ''
+         messageInputTranslate = ''
+         DBState.db.characters[selectedChar].chats[DBState.db.characters[selectedChar].chatPage].message = cha
+-        rerolls = []
+         await sleep(10)
+         updateInputSizeAll()
+         await sendChatMain(continueResponse)
+
+     }
+
++    function getCurrentMessages() {
++        return DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message
++    }
++
++    function setCurrentMessages(messages: Message[]) {
++        DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = messages
++    }
++
++    function cloneWithoutSwipeState(message: Message): Message {
++        const cloned = safeStructuredClone(message)
++        delete cloned.swipes
++        delete cloned.swipeId
++        return cloned
++    }
++
++    function cleanSwipeVariant(messages: Message[]) {
++        return messages.map(cloneWithoutSwipeState)
++    }
++
++    function attachSwipeState(messages: Message[], swipes: Message[][], swipeId: number) {
++        const nextMessages = cleanSwipeVariant(messages)
++        const lastMessage = nextMessages.at(-1)
++        if(lastMessage){
++            lastMessage.swipes = swipes.map(cleanSwipeVariant)
++            lastMessage.swipeId = swipeId
++        }
++        return nextMessages
++    }
++
++    function getActiveSwipeState(messages: Message[]) {
++        const lastMessage = messages.at(-1)
++        if(!lastMessage || !Array.isArray(lastMessage.swipes) || lastMessage.swipes.length === 0){
++            return null
++        }
++        const swipes = lastMessage.swipes.map(cleanSwipeVariant)
++        const swipeId = Math.min(Math.max(lastMessage.swipeId ?? swipes.length - 1, 0), swipes.length - 1)
++        const activeLength = Math.max(swipes[swipeId]?.length ?? 1, 1)
++        return { swipes, swipeId, activeLength }
++    }
++
++    function getCurrentResponseVariant(messages: Message[]) {
++        const variant: Message[] = []
++        const saying = messages.at(-1)?.saying
++        let sayingQu = 2
++        for(let i = messages.length - 1; i >= 0; i--){
++            const message = messages[i]
++            if(message.role === 'user'){
++                break
++            }
++            if(message.saying === saying){
++                sayingQu -= 1
++                if(sayingQu === 0){
++                    break
++                }
++            }
++            variant.unshift(cloneWithoutSwipeState(message))
++        }
++        return variant
++    }
++
++    function replaceSwipeVariant(swipeId: number) {
++        const messages = getCurrentMessages()
++        const swipeState = getActiveSwipeState(messages)
++        if(!swipeState){
++            return
++        }
++        const targetVariant = swipeState.swipes[swipeId]
++        if(!targetVariant){
++            return
++        }
++        const baseMessages = messages.slice(0, messages.length - swipeState.activeLength)
++        setCurrentMessages([
++            ...baseMessages,
++            ...attachSwipeState(targetVariant, swipeState.swipes, swipeId)
++        ])
++    }
++
+     async function reroll() {
+         if($doingChat){
+             return
+         }
+-        if(lastCharId !== $selectedCharID){
+-            rerolls = []
+-            rerollid = -1
+-        }
+         const genId = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.at(-1)?.generationInfo?.generationId
+         if(genId){
+             const r = Prereroll(genId)
+@@ -231,53 +297,31 @@
+                 return
+             }
+         }
+-        if(rerollid < rerolls.length - 1){
+-            if(Array.isArray(rerolls[rerollid + 1])){
+-                rerollid += 1
+-                let rerollData = safeStructuredClone(rerolls[rerollid])
+-                let msgs = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message
+-                for(let i = 0; i < rerollData.length; i++){
+-                    msgs[msgs.length - rerollData.length + i] = rerollData[i]
+-                }
+-                DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = msgs
+-            }
++        const messages = getCurrentMessages()
++        const swipeState = getActiveSwipeState(messages)
++        if(swipeState && swipeState.swipeId < swipeState.swipes.length - 1){
++            replaceSwipeVariant(swipeState.swipeId + 1)
+             return
+         }
+-        if(rerolls.length === 0){
+-            rerolls.push(safeStructuredClone([DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.at(-1)]))
+-            rerollid = rerolls.length - 1
++        const swipes = swipeState?.swipes ?? [getCurrentResponseVariant(messages)]
++        const activeLength = swipeState?.activeLength ?? swipes[0].length
++        if(activeLength === 0){
++            return
+         }
+-        let cha = safeStructuredClone(DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message)
++        let cha = safeStructuredClone(messages)
+         if(cha.length === 0 ){
+             return
+         }
+         openMenu = false
+-        const saying = cha[cha.length - 1].saying
+-        let sayingQu = 2
+-        while(cha[cha.length - 1].role !== 'user'){
+-            if(cha[cha.length - 1].saying === saying){
+-                sayingQu -= 1
+-                if(sayingQu === 0){
+-                    break
+-                }
+-            }
+-            let msg = cha.pop()
+-            if(!msg){
+-                return
+-            }
+-        }
+-        DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = cha
+-        await sendChatMain()
++        cha = cha.slice(0, cha.length - activeLength)
++        setCurrentMessages(cha)
++        await sendChatMain(false, { swipes })
+     }
+
+     async function unReroll() {
+         if($doingChat){
+             return
+         }
+-        if(lastCharId !== $selectedCharID){
+-            rerolls = []
+-            rerollid = -1
+-        }
+         const genId = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.at(-1)?.generationInfo?.generationId
+         if(genId){
+             const r = PreUnreroll(genId)
+@@ -286,23 +330,16 @@
+                 return
+             }
+         }
+-        if(rerollid <= 0){
++        const swipeState = getActiveSwipeState(getCurrentMessages())
++        if(!swipeState || swipeState.swipeId <= 0){
+             return
+         }
+-        if(Array.isArray(rerolls[rerollid - 1])){
+-            rerollid -= 1
+-            let rerollData = safeStructuredClone(rerolls[rerollid])
+-            let msgs = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message
+-            for(let i = 0; i < rerollData.length; i++){
+-                msgs[msgs.length - rerollData.length + i] = rerollData[i]
+-            }
+-            DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = msgs
+-        }
++        replaceSwipeVariant(swipeState.swipeId - 1)
+     }
+
+     let abortController:null|AbortController = null
+
+-    async function sendChatMain(continued:boolean = false) {
++    async function sendChatMain(continued:boolean = false, swipeState?: { swipes: Message[][] }) {
+
+         let previousLength = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.length
+         messageInput = ''
+@@ -312,9 +349,14 @@
+                 signal:abortController.signal,
+                 continue:continued
+             })
+-            if(previousLength < DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.length){
+-                rerolls.push(safeStructuredClone(DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message).slice(previousLength))
+-                rerollid = rerolls.length - 1
++            const messages = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message
++            if(swipeState && previousLength < messages.length){
++                const generatedVariant = cleanSwipeVariant(messages.slice(previousLength))
++                const swipes = [...swipeState.swipes.map(cleanSwipeVariant), generatedVariant]
++                DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = [
++                    ...messages.slice(0, previousLength),
++                    ...attachSwipeState(generatedVariant, swipes, swipes.length - 1)
++                ]
+             }
+         } catch (error) {
+             console.error(error)
+diff --git a/src/ts/storage/database.svelte.ts b/src/ts/storage/database.svelte.ts
+index 791a3454..3791f679 100644
+--- a/src/ts/storage/database.svelte.ts
++++ b/src/ts/storage/database.svelte.ts
+@@ -1849,6 +1849,8 @@ export interface Message{
+     time?: number
+     generationInfo?: MessageGenerationInfo
+     promptInfo?: MessagePresetInfo
++    swipes?: Message[][]
++    swipeId?: number
+     name?:string
+     otherUser?:boolean
+     disabled?:false|true|'allBefore'

@@ -25,12 +25,6 @@ const PROXY_CONTROL_HEADERS = new Set([
   'x-target-url',
 ])
 
-const EXPOSED_RESPONSE_HEADERS = [
-  'content-type',
-  'content-length',
-  'x-request-id',
-]
-
 type ProxyLogMetadata = {
   target?: {
     host: string
@@ -104,22 +98,11 @@ app.use(pinoLogger({
   },
 }))
 
-function corsHeaders(origin: string | null): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization,Content-Type,X-Proxy-Token,X-Target-URL,X-API-Key,Ollama-API-Key',
-    'Access-Control-Expose-Headers': EXPOSED_RESPONSE_HEADERS.join(','),
-    'Vary': 'Origin',
-  }
-}
-
-function jsonError(message: string, status: number, origin: string | null): Response {
+function jsonError(message: string, status: number): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...corsHeaders(origin),
     },
   })
 }
@@ -157,15 +140,25 @@ function buildUpstreamHeaders(headers: Headers): Headers {
     upstreamHeaders.set(name, value)
   }
 
+  // Force identity encoding: Node's fetch transparently decompresses
+  // gzip/br upstream bodies, so passing the original Content-Encoding header
+  // through would make clients decompress an already-plain body (Z_DATA_ERROR).
+  upstreamHeaders.set('accept-encoding', 'identity')
+
   return upstreamHeaders
 }
 
-function buildResponseHeaders(headers: Headers, origin: string | null): Headers {
-  const responseHeaders = new Headers(corsHeaders(origin))
+function buildResponseHeaders(headers: Headers): Headers {
+  const responseHeaders = new Headers()
 
   for (const [name, value] of headers.entries()) {
     const lowerName = name.toLowerCase()
     if (HOP_BY_HOP_HEADERS.has(lowerName)) {
+      continue
+    }
+
+    // The body has already been decompressed by the upstream fetch.
+    if (lowerName === 'content-encoding' || lowerName === 'content-length') {
       continue
     }
 
@@ -204,9 +197,8 @@ async function readBodyMetadata(request: Request): Promise<Record<string, unknow
   }
 }
 
-app.options('/', (c) => new Response(null, {
+app.options('/', () => new Response(null, {
   status: 204,
-  headers: corsHeaders(c.req.header('Origin') ?? null),
 }))
 
 app.get('/healthz', (c) => c.json({
@@ -214,28 +206,27 @@ app.get('/healthz', (c) => c.json({
 }))
 
 app.all('/', async (c) => {
-  const origin = c.req.header('Origin') ?? null
   const requestLog: ProxyLogMetadata['request'] = {
     contentType: c.req.header('Content-Type') ?? null,
     contentLength: c.req.header('Content-Length') ?? null,
   }
 
   if (!proxyToken) {
-    return jsonError('API proxy token is not configured', 500, origin)
+    return jsonError('API proxy token is not configured', 500)
   }
 
   if (c.req.header('X-Proxy-Token') !== proxyToken) {
-    return jsonError('Invalid proxy token', 401, origin)
+    return jsonError('Invalid proxy token', 401)
   }
 
   const target = parseTarget(c.req.header('X-Target-URL') ?? null)
   if (!target) {
-    return jsonError('Target URL is invalid', 400, origin)
+    return jsonError('Target URL is invalid', 400)
   }
 
   const method = c.req.method.toUpperCase()
   if (method !== 'GET' && method !== 'POST') {
-    return jsonError('Method is not allowed', 405, origin)
+    return jsonError('Method is not allowed', 405)
   }
 
   requestLog.body = method === 'GET' ? undefined : await readBodyMetadata(c.req.raw)
@@ -273,7 +264,7 @@ app.all('/', async (c) => {
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
-    headers: buildResponseHeaders(upstreamResponse.headers, origin),
+    headers: buildResponseHeaders(upstreamResponse.headers),
   })
 })
 

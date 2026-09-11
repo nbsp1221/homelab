@@ -1,0 +1,494 @@
+diff --git a/src/ts/network/proxyJobWs.ts b/src/ts/network/proxyJobWs.ts
+index 691667f..5d5cc55 100644
+--- a/src/ts/network/proxyJobWs.ts
++++ b/src/ts/network/proxyJobWs.ts
+@@ -1,9 +1,9 @@
+ export type ProxyJobWsEvent =
+     | { type: 'job_accepted', jobId: string }
+-    | { type: 'upstream_headers', status: number, headers: Record<string, string> }
+-    | { type: 'chunk', dataBase64: string }
+-    | { type: 'error', status?: number, message: string }
+-    | { type: 'done' }
++    | { type: 'upstream_headers', status: number, headers: Record<string, string>, sequence?: number }
++    | { type: 'chunk', dataBase64: string, sequence?: number }
++    | { type: 'error', status?: number, message: string, sequence?: number }
++    | { type: 'done', sequence?: number }
+     | { type: 'ping', ts: number };
+
+ export function parseProxyJobWsEvent(raw: string): ProxyJobWsEvent | null {
+diff --git a/src/ts/globalApi.svelte.ts b/src/ts/globalApi.svelte.ts
+index 93792c7..d2dcb9a 100644
+--- a/src/ts/globalApi.svelte.ts
++++ b/src/ts/globalApi.svelte.ts
+@@ -1615,17 +1615,56 @@ async function fetchViaProxyJobWs(url: string, arg: {
+     let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+     const encoder = new TextEncoder();
+
+-    const ws = new WebSocket(wsUrl);
++    let ws: WebSocket | null = null;
++    let detachedForBackground = false;
++    let frozen = false;
++    let connectTimer: ReturnType<typeof setTimeout> | null = null;
++    let lastSequence = 0;
++
++    const closeSocket = () => {
++        if (connectTimer !== null) {
++            clearTimeout(connectTimer);
++            connectTimer = null;
++        }
++        const current = ws;
++        ws = null;
++        if (!current) {
++            return;
++        }
++        try {
++            current.close();
++        } catch {
++            // no-op
++        }
++    };
++
++    const deleteJob = () => {
++        void fetch(`${baseUrl}/proxy-stream-jobs/${encodeURIComponent(jobId)}`, {
++            method: 'DELETE',
++            headers: {
++                'risu-auth': auth
++            }
++        }).catch(() => {});
++    };
++
++    const cleanupClient = () => {
++        document.removeEventListener('visibilitychange', visibilityHandler);
++        document.removeEventListener('freeze', freezeHandler);
++        document.removeEventListener('resume', resumeHandler);
++        requestSignal?.removeEventListener('abort', abortHandler);
++    };
++
+     const readable = new ReadableStream<Uint8Array>({
+         start(controller) {
+             streamController = controller;
+         },
+         cancel() {
+-            try {
+-                ws.close();
+-            } catch {
+-                // no-op
++            if (!settled) {
++                deleteJob();
+             }
++            settled = true;
++            cleanupClient();
++            closeSocket();
+         }
+     });
+     const pipedReadable = arg.fetchLogIndex != null ? pipeFetchLog(arg.fetchLogIndex, readable) : readable;
+@@ -1649,65 +1688,130 @@ async function fetchViaProxyJobWs(url: string, arg: {
+                 // no-op
+             }
+         }
+-        try {
+-            ws.close();
+-        } catch {
+-            // no-op
++        cleanupClient();
++        closeSocket();
++    };
++
++    const failVisibleSocket = () => {
++        if (settled || !streamController) {
++            return;
+         }
++        status = 502;
++        responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
++        ensureHeadersReady();
++        streamController.enqueue(encoder.encode('Proxy WebSocket stream error'));
++        closeAndEnd();
+     };
+
+-    ws.onmessage = (event) => {
+-        const parsed = parseProxyJobWsEvent(typeof event.data === 'string' ? event.data : '');
+-        if (!parsed || !streamController) {
++    const connectSocket = () => {
++        if (settled || ws || requestSignal?.aborted) {
+             return;
+         }
+-        switch (parsed.type) {
+-            case 'job_accepted':
+-            case 'ping':
+-                return;
+-            case 'upstream_headers':
+-                status = parsed.status;
+-                responseHeaders = parsed.headers ?? {};
+-                ensureHeadersReady();
++        if (frozen || document.visibilityState === 'hidden') {
++            detachedForBackground = true;
++            return;
++        }
++        const connection = new WebSocket(`${wsUrl}&after=${lastSequence}`);
++        ws = connection;
++        connection.onopen = () => {
++            if (connection === ws) {
++                detachedForBackground = false;
++            }
++        };
++
++        connection.onmessage = (event) => {
++            const parsed = parseProxyJobWsEvent(typeof event.data === 'string' ? event.data : '');
++            if (!parsed || !streamController || connection !== ws) {
+                 return;
+-            case 'chunk':
+-                ensureHeadersReady();
+-                streamController.enqueue(decodeProxyJobWsChunk(parsed.dataBase64));
++            }
++            if ('sequence' in parsed && typeof parsed.sequence === 'number') {
++                if (parsed.sequence <= lastSequence) {
++                    return;
++                }
++                lastSequence = parsed.sequence;
++            }
++            switch (parsed.type) {
++                case 'job_accepted':
++                case 'ping':
++                    return;
++                case 'upstream_headers':
++                    status = parsed.status;
++                    responseHeaders = parsed.headers ?? {};
++                    ensureHeadersReady();
++                    return;
++                case 'chunk':
++                    ensureHeadersReady();
++                    streamController.enqueue(decodeProxyJobWsChunk(parsed.dataBase64));
++                    return;
++                case 'error': {
++                    status = parsed.status ?? 502;
++                    responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
++                    ensureHeadersReady();
++                    const msg = formatProxyStreamErrorMessage(parsed.status, parsed.message);
++                    streamController.enqueue(encoder.encode(msg));
++                    closeAndEnd();
++                    return;
++                }
++                case 'done':
++                    ensureHeadersReady();
++                    closeAndEnd();
++                    return;
++            }
++        };
++
++        connection.onclose = () => {
++            if (connection !== ws) {
+                 return;
+-            case 'error': {
+-                status = parsed.status ?? 502;
+-                responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
+-                ensureHeadersReady();
+-                const msg = formatProxyStreamErrorMessage(parsed.status, parsed.message);
+-                streamController.enqueue(encoder.encode(msg));
+-                closeAndEnd();
++            }
++            ws = null;
++            if (settled) {
+                 return;
+             }
+-            case 'done':
+-                ensureHeadersReady();
+-                closeAndEnd();
++            if (frozen || document.visibilityState === 'hidden') {
++                detachedForBackground = true;
+                 return;
+-        }
++            }
++            failVisibleSocket();
++        };
+     };
+
+-    ws.onerror = () => {
+-        if (!streamController) {
++    const scheduleConnect = () => {
++        if (connectTimer !== null || settled || ws) {
+             return;
+         }
+-        status = 502;
+-        responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
+-        ensureHeadersReady();
+-        streamController.enqueue(encoder.encode('Proxy WebSocket stream error'));
+-        closeAndEnd();
++        // Android can emit visible before resume and reject sockets opened
++        // inside either lifecycle callback. A freezable task runs afterwards.
++        connectTimer = setTimeout(() => {
++            connectTimer = null;
++            connectSocket();
++        }, 0);
+     };
+
+-    ws.onclose = () => {
+-        if (!headersReady) {
+-            status = 502;
+-            responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
+-            ensureHeadersReady();
++    const freezeHandler = () => {
++        frozen = true;
++        detachedForBackground = true;
++        closeSocket();
++    };
++
++    const resumeHandler = () => {
++        frozen = false;
++        if (detachedForBackground) {
++            scheduleConnect();
++        }
++    };
++
++    const visibilityHandler = () => {
++        if (settled) {
++            return;
++        }
++        if (document.visibilityState === 'hidden') {
++            detachedForBackground = true;
++            closeSocket();
++            return;
++        }
++        if (detachedForBackground) {
++            scheduleConnect();
+         }
+-        closeAndEnd();
+     };
+
+     const abortHandler = () => {
+@@ -1717,23 +1821,21 @@ async function fetchViaProxyJobWs(url: string, arg: {
+         if (streamController && !settled) {
+             streamController.enqueue(encoder.encode('Aborted'));
+         }
+-        void fetch(`${baseUrl}/proxy-stream-jobs/${encodeURIComponent(jobId)}`, {
+-            method: 'DELETE',
+-            headers: {
+-                'risu-auth': auth
+-            }
+-        }).catch(() => {});
++        deleteJob();
+         closeAndEnd();
+     };
++    document.addEventListener('visibilitychange', visibilityHandler);
++    document.addEventListener('freeze', freezeHandler);
++    document.addEventListener('resume', resumeHandler);
+     if (requestSignal?.aborted) {
+         abortHandler();
+     }
+     else {
+         requestSignal?.addEventListener('abort', abortHandler, { once: true });
++        scheduleConnect();
+     }
+
+     await waitHeaders;
+-    requestSignal?.removeEventListener('abort', abortHandler);
+     return new Response(pipedReadable, {
+         status,
+         headers: new Headers(responseHeaders)
+@@ -1767,6 +1869,7 @@ export async function fetchNative(url: string, arg: {
+     logFetch?: boolean
+     requestTimeoutMs?: number
+     networkRoute?: 'auto' | 'local_network'
++    backgroundJob?: boolean
+ }): Promise<Response> {
+
+     const useInterceptor = !!arg.interceptor
+@@ -1777,6 +1880,20 @@ export async function fetchNative(url: string, arg: {
+
+     arg.method = arg.method ?? 'POST'
+
++    if (isNodeServer && arg.method === 'POST') {
++        const parsedUrl = new URL(url, window.location.href)
++        const isSameOriginApiProxy = parsedUrl.origin === window.location.origin
++            && (parsedUrl.pathname === '/api-proxy' || parsedUrl.pathname.startsWith('/api-proxy/'))
++        if (isSameOriginApiProxy) {
++            url = 'http://risuai-api-proxy:8787/'
++            arg = {
++                ...arg,
++                backgroundJob: true,
++                networkRoute: 'local_network',
++            }
++        }
++    }
++
+     let headers = arg.headers ?? {}
+     let realBody: Uint8Array
+
+@@ -1952,9 +2069,9 @@ export async function fetchNative(url: string, arg: {
+     }
+     else if (throughProxy) {
+         const useProxyJobWs = isNodeServer
+-            && arg.interceptor === 'openai_streaming'
+             && arg.method === 'POST'
+-            && useLocalNetworkRoute;
++            && useLocalNetworkRoute
++            && (arg.interceptor === 'openai_streaming' || arg.backgroundJob === true);
+         const nodeProxyAuth = isNodeServer ? await getNodeServerProxyAuth() : null;
+
+         if (useProxyJobWs) {
+@@ -1969,6 +2086,9 @@ export async function fetchNative(url: string, arg: {
+                     fetchLogIndex
+                 });
+             } catch (wsErr) {
++                if (arg.backgroundJob) {
++                    throw wsErr;
++                }
+                 console.warn('[ProxyJobWS] fallback to /proxy2 due to error:', wsErr);
+             }
+         }
+diff --git a/server/node/server.cjs b/server/node/server.cjs
+index 3e75e05..d92e5db 100644
+--- a/server/node/server.cjs
++++ b/server/node/server.cjs
+@@ -49,11 +49,16 @@ const PROXY_STREAM_DEFAULT_HEARTBEAT_SEC = 15;
+ const PROXY_STREAM_HEARTBEAT_MIN_SEC = 5;
+ const PROXY_STREAM_HEARTBEAT_MAX_SEC = 60;
+ const PROXY_STREAM_GC_INTERVAL_MS = 60000;
+-const PROXY_STREAM_DONE_GRACE_MS = 30000;
+ const PROXY_STREAM_MAX_ACTIVE_JOBS = 64;
+-const PROXY_STREAM_MAX_PENDING_EVENTS = 512;
++const PROXY_STREAM_MAX_PENDING_EVENTS = 16384;
+ const PROXY_STREAM_MAX_PENDING_BYTES = 2 * 1024 * 1024;
+ const PROXY_STREAM_MAX_BODY_BASE64_BYTES = 8 * 1024 * 1024;
++const PROXY_STREAM_ALLOWED_HOSTS = new Set(
++    (process.env.PROXY_STREAM_ALLOWED_HOSTS || '')
++        .split(',')
++        .map((host) => host.trim().toLowerCase())
++        .filter(Boolean)
++);
+ const proxyStreamJobs = new Map();
+ const authenticatedRouteLimiter = rateLimit({
+     windowMs: 60 * 1000,
+@@ -252,6 +257,9 @@ function isLocalNetworkHost(hostname) {
+     }
+
+     const normalizedHost = hostname.toLowerCase().replace(/\.$/, '').split('%')[0];
++    if (PROXY_STREAM_ALLOWED_HOSTS.has(normalizedHost)) {
++        return true;
++    }
+     if (normalizedHost === 'localhost' || normalizedHost === '::1' || normalizedHost.endsWith('.local')) {
+         return true;
+     }
+@@ -411,8 +419,9 @@ function createProxyStreamJob(arg) {
+         done: false,
+         cleanupAt: 0,
+         clients: new Set(),
+-        pendingEvents: [],
++        events: [],
+         pendingBytes: 0,
++        nextSequence: 1,
+         abortController: controller,
+         deadlineAt: createdAt + timeoutMs,
+         heartbeatSec,
+@@ -424,21 +433,20 @@ function createProxyStreamJob(arg) {
+
+ function pushJobEvent(job, event) {
+     job.updatedAt = Date.now();
+-    const text = JSON.stringify(event);
+-    if (job.clients.size === 0) {
+-        job.pendingEvents.push(text);
+-        job.pendingBytes += Buffer.byteLength(text);
+-        while (
+-            job.pendingEvents.length > PROXY_STREAM_MAX_PENDING_EVENTS
+-            || job.pendingBytes > PROXY_STREAM_MAX_PENDING_BYTES
+-        ) {
+-            const removed = job.pendingEvents.shift();
+-            if (!removed) {
+-                break;
+-            }
+-            job.pendingBytes -= Buffer.byteLength(removed);
++    const sequence = job.nextSequence++;
++    const text = JSON.stringify({ ...event, sequence });
++    const bytes = Buffer.byteLength(text);
++    job.events.push({ sequence, text, bytes });
++    job.pendingBytes += bytes;
++    while (
++        job.events.length > PROXY_STREAM_MAX_PENDING_EVENTS
++        || job.pendingBytes > PROXY_STREAM_MAX_PENDING_BYTES
++    ) {
++        const removed = job.events.shift();
++        if (!removed) {
++            break;
+         }
+-        return;
++        job.pendingBytes -= removed.bytes;
+     }
+     for (const client of job.clients) {
+         if (client.readyState === client.OPEN) {
+@@ -452,7 +460,7 @@ function markJobDone(job) {
+         return;
+     }
+     job.done = true;
+-    job.cleanupAt = Date.now() + PROXY_STREAM_DONE_GRACE_MS;
++    job.cleanupAt = Date.now() + job.timeoutMs;
+ }
+
+ function cleanupJob(jobId) {
+@@ -1440,6 +1448,12 @@ function setupProxyStreamWebSocket(server) {
+
+             const pathParts = reqUrl.pathname.split('/').filter(Boolean);
+             const jobId = pathParts.length >= 3 ? pathParts[1] : '';
++            const afterSequence = Number.parseInt(reqUrl.searchParams.get('after') || '0', 10);
++            if (!Number.isInteger(afterSequence) || afterSequence < 0) {
++                socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
++                socket.destroy();
++                return;
++            }
+             const job = proxyStreamJobs.get(jobId);
+             if (!job) {
+                 socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+@@ -1448,7 +1462,7 @@ function setupProxyStreamWebSocket(server) {
+             }
+
+             wsServer.handleUpgrade(req, socket, head, (ws) => {
+-                wsServer.emit('connection', ws, req, jobId);
++                wsServer.emit('connection', ws, req, jobId, afterSequence);
+             });
+         } catch {
+             socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+@@ -1456,20 +1470,30 @@ function setupProxyStreamWebSocket(server) {
+         }
+     });
+
+-    wsServer.on('connection', (ws, _req, jobId) => {
++    wsServer.on('connection', (ws, _req, jobId, afterSequence) => {
+         const job = proxyStreamJobs.get(jobId);
+         if (!job) {
+             ws.close();
+             return;
+         }
+
+-        job.clients.add(ws);
+         ws.send(JSON.stringify({ type: 'job_accepted', jobId }));
+-        for (const event of job.pendingEvents) {
+-            ws.send(event);
++        const firstAvailableSequence = job.events[0]?.sequence ?? job.nextSequence;
++        if (afterSequence < firstAvailableSequence - 1) {
++            ws.send(JSON.stringify({
++                type: 'error',
++                status: 507,
++                message: 'Proxy stream replay buffer exceeded'
++            }));
++            ws.close();
++            return;
++        }
++        job.clients.add(ws);
++        for (const event of job.events) {
++            if (event.sequence > afterSequence) {
++                ws.send(event.text);
++            }
+         }
+-        job.pendingEvents = [];
+-        job.pendingBytes = 0;
+
+         const pingTimer = setInterval(() => {
+             if (ws.readyState !== ws.OPEN) {
+@@ -1485,9 +1509,6 @@ function setupProxyStreamWebSocket(server) {
+                 return;
+             }
+             currentJob.clients.delete(ws);
+-            if (currentJob.done && currentJob.clients.size === 0) {
+-                cleanupJob(jobId);
+-            }
+         });
+
+         ws.on('error', () => {

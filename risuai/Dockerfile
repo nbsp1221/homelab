@@ -2,15 +2,18 @@
 
 FROM node:26-slim AS source
 WORKDIR /src
+ARG RISUAI_REF=3d3dd1a0efbd32c30797ae3802a4dc080d638123
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates git && \
     rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 --branch main https://github.com/kwaroran/Risuai.git .
-COPY patches/api-v3-messageport-stream-bridge.patch /tmp/api-v3-messageport-stream-bridge.patch
-COPY patches/apply-stream-bridge-patch.sh /tmp/apply-stream-bridge-patch.sh
-RUN sh /tmp/apply-stream-bridge-patch.sh
+RUN git init . && \
+    git remote add origin https://github.com/kwaroran/Risuai.git && \
+    git fetch --depth 1 origin "$RISUAI_REF" && \
+    git checkout FETCH_HEAD
+COPY patches /tmp/patches
+RUN sh /tmp/patches/apply-patches.sh
 
 FROM node:26-slim AS deps
 WORKDIR /app

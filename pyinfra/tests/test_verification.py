@@ -11,6 +11,7 @@ def test_final_verification_covers_the_complete_baseline_contract() -> None:
     assert "systemctl is-enabled --quiet docker" in command
     assert "docker compose version --short" in command
     assert "id -nG -- retn0" in command
+    assert "LC_ALL=C apt-cache policy docker-ce" in command
 
 
 def test_operator_names_are_shell_quoted() -> None:

@@ -12,6 +12,9 @@ def build_baseline_verification(
     swap_path = validate_path(swap_path)
     expected_bytes = swap_size_bytes(swap_size_mb)
     fstab_entry = canonical_fstab_entry(swap_path)
+    candidate_command = (
+        "LC_ALL=C apt-cache policy docker-ce | awk '/Candidate:/ { print $2 }'"
+    )
     user_checks = "\n".join(
         f'id -nG -- {shlex.quote(user)} | tr " " "\\n" | grep -Fx docker'
         for user in docker_users
@@ -28,7 +31,7 @@ def build_baseline_verification(
         grep -F 'URIs: https://download.docker.com/linux/' \
           /etc/apt/sources.list.d/docker.sources
         installed=$(dpkg-query -W -f='${{Version}}' docker-ce)
-        candidate=$(apt-cache policy docker-ce | awk '/Candidate:/ {{ print $2 }}')
+        candidate=$({candidate_command})
         test -n "$installed"
         test "$installed" = "$candidate"
         systemctl is-active --quiet docker

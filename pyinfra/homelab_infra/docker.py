@@ -22,6 +22,9 @@ DOCKER_PACKAGES = (
 APT_UPDATE_ERROR_MODE_PATH = "/etc/apt/apt.conf.d/99homelab-update-error-mode"
 APT_UPDATE_ERROR_MODE = b'APT::Update::Error-Mode "any";\n'
 DOCKER_KEY_PATH = "/etc/apt/keyrings/docker.asc"
+DOCKER_PACKAGE_POLICY_COMMAND = (
+    "LC_ALL=C apt-cache policy docker-ce 2>/dev/null || true"
+)
 DOCKER_CONFLICTING_PACKAGES = frozenset(
     {
         "containerd",
@@ -149,7 +152,7 @@ def configure_docker() -> None:
     )
     package_policy = host.get_fact(
         Command,
-        command="apt-cache policy docker-ce 2>/dev/null || true",
+        command=DOCKER_PACKAGE_POLICY_COMMAND,
     )
     apt.update(
         name="Refresh Docker repository metadata",

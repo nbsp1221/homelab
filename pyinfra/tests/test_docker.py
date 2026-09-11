@@ -6,6 +6,7 @@ from homelab_infra.docker import (
     APT_UPDATE_ERROR_MODE,
     APT_UPDATE_ERROR_MODE_PATH,
     DOCKER_KEY_PATH,
+    DOCKER_PACKAGE_POLICY_COMMAND,
     DOCKER_PACKAGES,
     docker_package_candidate_available,
     docker_repository,
@@ -119,6 +120,12 @@ def test_docker_package_candidate_availability(
     expected: bool,
 ) -> None:
     assert docker_package_candidate_available(policy) is expected
+
+
+def test_docker_candidate_query_uses_a_stable_locale() -> None:
+    assert DOCKER_PACKAGE_POLICY_COMMAND == (
+        "LC_ALL=C apt-cache policy docker-ce 2>/dev/null || true"
+    )
 
 
 def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None:

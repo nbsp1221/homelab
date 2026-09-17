@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint
+  compose-lint:
+    name: Compose lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -31,3 +31,49 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+  pyinfra:
+    name: pyinfra
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.10"
+          enable-cache: true
+          cache-dependency-glob: pyinfra/uv.lock
+
+      - name: Set up Python
+        working-directory: pyinfra
+        run: uv python install
+
+      - name: Synchronize pyinfra tooling
+        working-directory: pyinfra
+        run: uv sync --locked
+
+      - name: Test
+        working-directory: pyinfra
+        run: uv run pytest
+
+      - name: Lint
+        working-directory: pyinfra
+        run: uv run ruff check .
+
+      - name: Check formatting
+        working-directory: pyinfra
+        run: uv run ruff format --check .
+
+      - name: Compile Python
+        working-directory: pyinfra
+        run: >-
+          uv run python -m compileall -q
+          deploys group_data homelab_infra inventories tests
+
+      - name: Validate inventory
+        working-directory: pyinfra
+        run: uv run pyinfra inventories/production.py debug-inventory

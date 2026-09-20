@@ -46,34 +46,34 @@ jobs:
         with:
           version: "0.12.10"
           enable-cache: true
-          cache-dependency-glob: pyinfra/uv.lock
+          cache-dependency-glob: deploy/pyinfra/uv.lock
 
       - name: Set up Python
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: uv python install
 
       - name: Synchronize pyinfra tooling
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: uv sync --locked
 
       - name: Test
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: uv run pytest
 
       - name: Lint
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: uv run ruff check .
 
       - name: Check formatting
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: uv run ruff format --check .
 
       - name: Compile Python
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: >-
           uv run python -m compileall -q
           deploys group_data homelab_infra inventories tests
 
       - name: Validate inventory
-        working-directory: pyinfra
+        working-directory: deploy/pyinfra
         run: uv run pyinfra inventories/production.py debug-inventory

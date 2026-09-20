@@ -1,6 +1,6 @@
 # Beszel cloud agent
 
-This standalone Compose project runs an outbound-only Beszel agent on a cloud host. The Hub and NVIDIA-specific main-host agent remain in [`beszel/`](../../beszel/README.md). The first managed target is `retn0-srv-gcp-01`; do not deploy a second agent on that host.
+This standalone Compose project runs an outbound-only Beszel agent on a cloud host. The Hub and NVIDIA-specific main-host agent remain in [`beszel/`](../../beszel/README.md). Its GCP placement and Hub URL are declared in [`hosts/retn0-srv-gcp-01/host.yaml`](../../hosts/retn0-srv-gcp-01/host.yaml); do not deploy a second agent on that host.
 
 The agent uses host networking for host interface metrics, but `DISABLE_SSH=true` disables its inbound SSH listener. It sends a WebSocket connection to the Hub through Tailscale Serve.
 
@@ -15,13 +15,11 @@ Docker container monitoring keeps the GCP host's existing direct `/var/run/docke
 
 ## First deployment
 
-Place this directory at `/opt/stacks/beszel-agent` on the target host. Copy `.env.example` to `.env`, set the real key and token, and restrict the file to the operator account. Keep `./data` persistent: Beszel stores the agent identity there.
+The [pyinfra executor](../../deploy/pyinfra/README.md) copies `compose.yaml` to `/opt/stacks/beszel-agent` when explicitly invoked. Set the target's `.env` from `.env.example` with the real key and token, and restrict it to the operator account. Keep `./data` persistent: Beszel stores the agent identity there. The Hub URL is supplied from the host definition, not from `.env.example`.
 
 ```bash
 cd /opt/stacks/beszel-agent
 chmod 600 .env
-docker compose config --quiet
-docker compose up -d
 docker compose ps
 docker compose exec -T beszel-agent /agent health
 ```
@@ -33,6 +31,7 @@ For an existing installation, preserve its `data/` directory and current key/tok
 ## Local validation
 
 ```bash
-docker compose --env-file .env.example config --quiet
+BESZEL_HUB_URL=https://retn0-srv-main.tail8642da.ts.net \
+  docker compose --env-file .env.example config --quiet
 pnpm lint:compose
 ```

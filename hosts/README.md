@@ -1,12 +1,24 @@
-# Host-to-project map
+# Hosts
 
-This is the small deployment map for the four hosts. `pyinfra/` owns the cloud OS and Docker baseline; each Compose project owns one application stack. Runtime data, populated `.env` files, and Hub UI state stay outside Git.
+Each `hosts/<hostname>/host.yaml` records a server's provider and the Compose stacks that this repository's deployment executor should apply there. This directory describes placement and host-specific non-secret values; it does not contain application Compose definitions or deployment commands.
 
-| Host | Beszel role | Compose project | State |
-| --- | --- | --- | --- |
-| `retn0-srv-main` | Hub and local NVIDIA agent | [`beszel/`](../beszel/README.md) | Existing deployment; add tailnet-only Hub access for cloud agents |
-| `retn0-srv-gcp-01` | Generic cloud agent | [`compose/beszel-agent/`](../compose/beszel-agent/README.md) | First adoption target; preserve existing agent identity/data |
-| `retn0-srv-oci-01` | None yet | — | Consider after GCP verification |
-| `retn0-srv-oci-02` | None yet | — | Consider after GCP verification |
+```yaml
+provider: gcp
+stacks:
+  beszel-agent:
+    env:
+      BESZEL_HUB_URL: https://retn0-srv-main.tail8642da.ts.net
+```
 
-Do not infer that a row marked as a target is already deployed. Keep project-specific overrides only when a host actually needs them; do not add empty per-host directories.
+An empty `stacks: {}` means this repository has not adopted any Compose stacks for automated deployment on that host. It does not mean the server is empty or that existing services should be removed. In particular, the main host's existing Beszel Hub remains managed in its current directory.
+
+| Host | Stack placement currently managed here |
+| --- | --- |
+| `retn0-srv-main` | None yet; existing services remain in their current locations |
+| `retn0-srv-gcp-01` | `beszel-agent` pilot; not yet applied by this branch |
+| `retn0-srv-oci-01` | None yet |
+| `retn0-srv-oci-02` | None yet |
+
+The cloud hosts also supply the pyinfra inventory through these same files. `provider` selects the existing GCP or OCI connection defaults in `deploy/pyinfra/group_data/`. The main host is local and is not part of the cloud pyinfra inventory.
+
+Only put non-secret values in `host.yaml`. Keep populated `.env` files and persistent data on the target host, outside Git. Removing a stack from `host.yaml` does not stop or delete it; decommissioning is a separate, deliberate operation.

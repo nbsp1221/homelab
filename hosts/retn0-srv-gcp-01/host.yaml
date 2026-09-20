@@ -1,0 +1,5 @@
+provider: gcp
+stacks:
+  beszel-agent:
+    env:
+      BESZEL_HUB_URL: https://retn0-srv-main.tail8642da.ts.net

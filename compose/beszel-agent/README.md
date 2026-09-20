@@ -4,7 +4,7 @@ This standalone Compose project runs an outbound-only Beszel agent on a cloud ho
 
 The agent uses host networking for host interface metrics, but `DISABLE_SSH=true` disables its inbound SSH listener. It sends a WebSocket connection to the Hub through Tailscale Serve.
 
-Docker container monitoring is deliberately disabled with `DOCKER_HOST=""`. The GCP host currently runs only this agent, so Docker access adds privilege without useful workload metrics. If a future host has Docker workloads to monitor, decide its socket policy then; the main host already uses a restricted socket proxy.
+Docker container monitoring keeps the GCP host's existing direct `/var/run/docker.sock:ro` mount. This is the smallest change that preserves its current metrics and avoids adding a proxy service. The `:ro` mount protects the socket path from filesystem writes, but it does not restrict Docker API requests; access to the Docker daemon remains highly privileged. If that risk becomes unacceptable, use a restricted socket proxy like the main host rather than assuming `:ro` makes the API read-only.
 
 ## Host prerequisites
 
@@ -28,7 +28,7 @@ docker compose exec -T beszel-agent /agent health
 
 The Hub should show one online entry for the host. Do not create another Hub system record when a universal token has already registered this agent.
 
-For an existing installation, preserve its `data/` directory and current key/token while replacing the Compose definition. Do not run `docker compose down --volumes`; Compose may recreate the existing `beszel-agent` container briefly during the migration. Verify the Hub connection and host metrics after deployment. GCP container metrics will intentionally disappear.
+For an existing installation, preserve its `data/` directory and current key/token while replacing the Compose definition. Do not run `docker compose down --volumes`; Compose may recreate the existing `beszel-agent` container briefly during the migration. Verify the Hub connection, host metrics, and Docker metrics after deployment.
 
 ## Local validation
 

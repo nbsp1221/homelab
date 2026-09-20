@@ -11,10 +11,10 @@ services:
       TOKEN: ${BESZEL_AGENT_TOKEN:?}
       HUB_URL: ${BESZEL_HUB_URL:?}
       DISABLE_SSH: "true"
-      DOCKER_HOST: ""
     network_mode: host # composelint-disable-line no-host-network -- host interface metrics require it; SSH is disabled
     volumes:
       - ./data:/var/lib/beszel-agent
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: ["CMD", "/agent", "health"]
       interval: 120s

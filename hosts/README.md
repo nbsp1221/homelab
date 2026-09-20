@@ -7,7 +7,7 @@ provider: gcp
 stacks:
   beszel-agent:
     env:
-      BESZEL_HUB_URL: https://retn0-srv-main.tail8642da.ts.net
+      BESZEL_HUB_URL: https://beszel.retn0.dev
 ```
 
 An empty `stacks: {}` means this repository has not adopted any Compose stacks for automated deployment on that host. It does not mean the server is empty or that existing services should be removed. In particular, the main host's existing Beszel Hub remains managed in its current directory.

@@ -22,9 +22,7 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
     }
     assert hosts["retn0-srv-main"]["stacks"] == {}
     assert hosts["retn0-srv-gcp-01"]["stacks"] == {
-        "beszel-agent": {
-            "env": {"BESZEL_HUB_URL": "https://retn0-srv-main.tail8642da.ts.net"}
-        }
+        "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
     }
     for config in hosts.values():
         for stack in config["stacks"]:

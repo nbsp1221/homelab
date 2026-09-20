@@ -20,16 +20,29 @@ for stack, settings in definition["stacks"].items():
         mode="755",
         _sudo=True,
     )
+    if (source.parent / ".env.example").is_file():
+        server.shell(
+            name=f"Require host-local {stack} environment file",
+            commands=f"test -f {target}/.env",
+        )
     files.put(
-        name=f"Upload {stack} Compose file",
+        name=f"Stage {stack} Compose file",
         src=str(source),
-        dest=f"{target}/compose.yaml",
+        dest=f"{target}/compose.pending.yaml",
         add_deploy_dir=False,
+        mode="600",
     )
     server.shell(
-        name=f"Validate {stack} Compose configuration",
-        commands=f"docker compose --project-directory {target} config --quiet",
+        name=f"Validate staged {stack} Compose configuration",
+        commands=(
+            f"docker compose --project-directory {target} "
+            f"-f {target}/compose.pending.yaml config --quiet"
+        ),
         _env=environment,
+    )
+    server.shell(
+        name=f"Promote validated {stack} Compose file",
+        commands=f"mv -f {target}/compose.pending.yaml {target}/compose.yaml",
     )
     docker.compose(
         name=f"Apply {stack} Compose project",

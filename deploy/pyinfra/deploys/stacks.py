@@ -1,3 +1,5 @@
+import json
+
 from pyinfra import host
 from pyinfra.operations import docker, files, server
 
@@ -25,11 +27,27 @@ for stack, settings in definition["stacks"].items():
             name=f"Require host-local {stack} environment file",
             commands=f"test -f {target}/.env",
         )
+    if environment:
+        files.block(
+            name=f"Sync {stack} non-secret host values",
+            path=f"{target}/.env",
+            content=[
+                f"{key}={json.dumps(value)}" for key, value in environment.items()
+            ],
+            marker="# {mark} HOMELAB HOST VALUES",
+        )
+        files.file(
+            name=f"Protect {stack} environment file",
+            path=f"{target}/.env",
+            mode="600",
+        )
     files.put(
         name=f"Stage {stack} Compose file",
         src=str(source),
         dest=f"{target}/compose.pending.yaml",
         add_deploy_dir=False,
+        user=host.data.ssh_user,
+        group=host.data.ssh_user,
         mode="600",
     )
     server.shell(

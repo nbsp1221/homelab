@@ -39,6 +39,17 @@ def test_host_definitions_reject_invalid_stack_paths(tmp_path) -> None:
         load_hosts(tmp_path)
 
 
+def test_host_definitions_reject_invalid_environment_keys(tmp_path) -> None:
+    host_dir = tmp_path / "example"
+    host_dir.mkdir()
+    (host_dir / "host.yaml").write_text(
+        "provider: gcp\nstacks:\n  beszel-agent:\n"
+        "    env:\n      'BESZEL_HUB_URL=bad': https://beszel.retn0.dev\n"
+    )
+    with pytest.raises(ValueError, match="Invalid environment"):
+        load_hosts(tmp_path)
+
+
 def test_group_data_expresses_shared_and_provider_specific_intent() -> None:
     assert all_data.ssh_key == "/home/retn0/.ssh/oci-main-bootstrap"
     assert all_data._sudo is True

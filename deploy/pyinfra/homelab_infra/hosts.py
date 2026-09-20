@@ -27,7 +27,11 @@ def load_hosts(hosts_dir: Path = HOSTS_DIR) -> dict[str, dict]:
                 raise ValueError(f"Invalid settings for {stack} in {path}")
             env = settings.get("env", {})
             if not isinstance(env, dict) or any(
-                not isinstance(key, str) or not isinstance(value, str)
+                not isinstance(key, str)
+                or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", key)
+                or not isinstance(value, str)
+                or "\n" in value
+                or "\r" in value
                 for key, value in env.items()
             ):
                 raise ValueError(f"Invalid environment for {stack} in {path}")

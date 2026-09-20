@@ -14,7 +14,7 @@ Docker container monitoring keeps the GCP host's existing direct `/var/run/docke
 
 ## First deployment
 
-The [pyinfra executor](../../deploy/pyinfra/README.md) copies `compose.yaml` to `/opt/stacks/beszel-agent` when explicitly invoked. Set the target's `.env` from `.env.example` with the real key and token, and restrict it to the operator account. Keep `./data` persistent: Beszel stores the agent identity there. The Hub URL is supplied from the host definition, not from `.env.example`.
+The [pyinfra executor](../../deploy/pyinfra/README.md) copies `compose.yaml` to `/opt/stacks/beszel-agent` when explicitly invoked. Set the target's `.env` from `.env.example` with the real key and token, and restrict it to the operator account. Keep `./data` persistent: Beszel stores the agent identity there. The Hub URL comes from the host definition and is synchronized into the target's `.env`, so normal `docker compose` commands work there too.
 
 ```bash
 cd /opt/stacks/beszel-agent

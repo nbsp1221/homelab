@@ -19,7 +19,8 @@ for stack, settings in definition["stacks"].items():
         name=f"Create {stack} project directory",
         path=target,
         user=host.data.ssh_user,
-        mode="755",
+        group=host.data.ssh_user,
+        mode="700",
         _sudo=True,
     )
     if (source.parent / ".env.example").is_file():

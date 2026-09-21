@@ -24,6 +24,10 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
     assert hosts["retn0-srv-gcp-01"]["stacks"] == {
         "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
     }
+    for name in ("retn0-srv-oci-01", "retn0-srv-oci-02"):
+        assert hosts[name]["stacks"] == {
+            "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
+        }
     for config in hosts.values():
         for stack in config["stacks"]:
             assert (REPO_ROOT / "compose" / stack / "compose.yaml").is_file()

@@ -91,7 +91,7 @@ uv run pyinfra inventories/production.py deploys/stacks.py \
 
 The stack deploy synchronizes non-secret host values into a marked block of the target's existing `.env`, preserving its secret values and mode `600`. It then uploads `compose/<stack>/compose.yaml` as `compose.pending.yaml` under `/opt/stacks/<stack>/`, validates that candidate, and only then replaces the active Compose file and calls `up`. An absent `.env` stops before the active file is replaced; unlisted stacks are not stopped or deleted. The target's secrets and `data/` are neither uploaded nor replaced. The pilot only needs its Compose file; additional tracked configuration or build assets must be explicitly supported before another stack is adopted. Once applied, ordinary `docker compose` commands also work directly on the host.
 
-The GCP Beszel pilot has been applied. Its original secret-bearing Compose file is retained on that host as `/opt/stacks/beszel-agent/compose.pre-iac.yaml` with mode `600` for rollback; do not copy it into Git. The agent's identity remains in `/opt/stacks/beszel-agent/data/`. OCI agents are declared for the same flow and must be migrated one host at a time.
+The GCP and both OCI Beszel agents have been applied and verified. Each host retains its original secret-bearing Compose file as `/opt/stacks/beszel-agent/compose.pre-iac.yaml` with mode `600` for rollback; the OCI hosts also retain `.env.pre-iac`. Do not copy these files into Git. Each agent's identity remains in `/opt/stacks/beszel-agent/data/`.
 
 `baseline.py` does not perform a whole-system package upgrade or reboot a
 host. Run it twice after a change; the second run should report zero changed

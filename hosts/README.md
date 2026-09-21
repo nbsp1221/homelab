@@ -16,8 +16,8 @@ An empty `stacks: {}` means this repository has not adopted any Compose stacks f
 | --- | --- |
 | `retn0-srv-main` | None yet; existing services remain in their current locations |
 | `retn0-srv-gcp-01` | `beszel-agent` pilot; applied and verified |
-| `retn0-srv-oci-01` | `beszel-agent`; pending migration and verification |
-| `retn0-srv-oci-02` | `beszel-agent`; pending migration and verification |
+| `retn0-srv-oci-01` | `beszel-agent`; applied and verified |
+| `retn0-srv-oci-02` | `beszel-agent`; applied and verified |
 
 The cloud hosts also supply the pyinfra inventory through these same files. `provider` selects the existing GCP or OCI connection defaults in `deploy/pyinfra/group_data/`. The main host is local and is not part of the cloud pyinfra inventory.
 

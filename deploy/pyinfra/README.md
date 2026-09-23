@@ -1,8 +1,6 @@
 # pyinfra
 
-This project manages the baseline configuration of the homelab's Linux hosts.
-pyinfra runs from `retn0-srv-main` and connects to managed hosts over Tailscale
-SSH. Managed hosts do not run an agent or require Python.
+This executor manages the baseline configuration and explicitly selected Compose stacks on the homelab's cloud Linux hosts. pyinfra runs from `retn0-srv-main` and connects to managed hosts over Tailscale SSH. Managed hosts do not run an agent or require Python.
 
 ## Scope
 
@@ -12,9 +10,9 @@ SSH. Managed hosts do not run an agent or require Python.
 - Install current Docker Engine and Docker Compose from Docker's official
   repository.
 - Run operating-system package upgrades only when explicitly requested.
+- Copy and apply Compose stacks listed in `hosts/<hostname>/host.yaml` when the stack deploy is explicitly requested.
 
-Cloud resources, Tailscale enrollment, firewalls, application stacks, and
-secrets are outside this baseline.
+Cloud resources, Tailscale enrollment, firewalls, and secrets are outside this executor. The OS baseline does not automatically deploy application stacks.
 
 ## Controller setup
 
@@ -22,7 +20,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) on
 `retn0-srv-main`, then synchronize the locked Python 3.12 environment:
 
 ```bash
-cd /home/retn0/deploy/homelab/pyinfra
+cd /home/retn0/deploy/homelab/deploy/pyinfra
 uv sync --locked
 ```
 
@@ -82,16 +80,28 @@ uv run pyinfra inventories/production.py deploys/maintenance.py \
   --limit retn0-srv-gcp-01 --serial --yes
 ```
 
+Preview a stack deployment for one cloud host, then apply it only after checking that host's existing `.env`, data directory, and Beszel identity:
+
+```bash
+uv run pyinfra inventories/production.py deploys/stacks.py \
+  --limit retn0-srv-gcp-01 --dry --diff --serial
+uv run pyinfra inventories/production.py deploys/stacks.py \
+  --limit retn0-srv-gcp-01 --serial --yes
+```
+
+The stack deploy synchronizes non-secret host values into a marked block of the target's existing `.env`, preserving its secret values and mode `600`. It then uploads `compose/<stack>/compose.yaml` as `compose.pending.yaml` under `/opt/stacks/<stack>/`, validates that candidate, and only then replaces the active Compose file and calls `up`. An absent `.env` stops before the active file is replaced; unlisted stacks are not stopped or deleted. The target's secrets and `data/` are neither uploaded nor replaced. The pilot only needs its Compose file; additional tracked configuration or build assets must be explicitly supported before another stack is adopted. Once applied, ordinary `docker compose` commands also work directly on the host.
+
+The GCP and both OCI Beszel agents have been applied and verified. Each host retains its original secret-bearing Compose file as `/opt/stacks/beszel-agent/compose.pre-iac.yaml` with mode `600` for rollback; the OCI hosts also retain `.env.pre-iac`. Do not copy these files into Git. Each agent's identity remains in `/opt/stacks/beszel-agent/data/`.
+
 `baseline.py` does not perform a whole-system package upgrade or reboot a
 host. Run it twice after a change; the second run should report zero changed
 operations. `maintenance.py` also never reboots hosts automatically.
 
 ## Project layout
 
-- `inventories/production.py`: managed host names and Tailscale addresses.
+- `inventories/production.py`: cloud inventory derived from `hosts/<hostname>/host.yaml`.
 - `group_data/`: shared values and GCP/OCI-specific users.
-- `deploys/`: operator-facing baseline, audit, verification, and maintenance
-  entrypoints.
+- `deploys/`: operator-facing baseline, stack deployment, audit, verification, and maintenance entrypoints.
 - `homelab_infra/`: reusable deploys and pure decision helpers.
 - `tests/`: local tests for inventory, safety, and generated commands.
 

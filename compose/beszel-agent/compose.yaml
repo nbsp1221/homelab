@@ -1,0 +1,23 @@
+name: beszel-agent
+
+services:
+  beszel-agent:
+    image: henrygd/beszel-agent:0.18.8
+    container_name: beszel-agent
+    init: true
+    restart: unless-stopped
+    environment:
+      KEY: ${BESZEL_AGENT_KEY:?}
+      TOKEN: ${BESZEL_AGENT_TOKEN:?}
+      HUB_URL: ${BESZEL_HUB_URL:?}
+      DISABLE_SSH: "true"
+    network_mode: host # composelint-disable-line no-host-network -- host interface metrics require it; SSH is disabled
+    volumes:
+      - ./data:/var/lib/beszel-agent
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 120s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

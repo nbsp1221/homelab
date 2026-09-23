@@ -2,12 +2,13 @@
 
 Personal homelab infrastructure and self-hosted services managed as code
 
-This repository currently contains a collection of small, mostly independent
-Docker Compose stacks. Each service lives in its own directory and can be
-started on its own.
+This repository contains small, mostly independent Docker Compose stacks. Existing services can still be started in their current directories. New multi-host deployments are being introduced one stack at a time through three separate responsibilities:
 
-As the homelab grows, this repository may also include host, network, storage,
-provisioning, and cluster configuration.
+- [`compose/`](compose/): the canonical Compose definition for each adopted stack.
+- [`hosts/`](hosts/): which host runs an adopted stack and its non-secret host-specific values.
+- [`deploy/`](deploy/): manually invoked executors that apply those definitions.
+
+The Beszel agents on the GCP and two OCI hosts use the new deployment flow. Existing main-host services have not been moved or redeployed.
 
 ## Table of Contents
 
@@ -40,13 +41,9 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 
 ## Infrastructure Automation
 
-The [`pyinfra/`](pyinfra/) project manages the baseline configuration of the
-GCP and OCI Linux hosts over Tailscale SSH. It currently covers host auditing,
-base packages, a disk-backed swap file, Docker Engine, and explicit package
-maintenance.
+The [`deploy/pyinfra/`](deploy/pyinfra/) executor manages the GCP and OCI Linux baseline over Tailscale SSH and can explicitly apply stacks assigned in `hosts/`. It covers host auditing, base packages, a disk-backed swap file, Docker Engine, and requested package maintenance. A Git push never deploys by itself.
 
-pyinfra runs from `retn0-srv-main`. See [`pyinfra/README.md`](pyinfra/README.md)
-for setup, validation, and operation instructions.
+pyinfra runs from `retn0-srv-main`. See [`deploy/pyinfra/README.md`](deploy/pyinfra/README.md) for setup, validation, and operation instructions.
 
 ## Quick Start
 

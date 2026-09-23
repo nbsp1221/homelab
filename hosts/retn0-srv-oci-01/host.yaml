@@ -1,0 +1,5 @@
+provider: oci
+stacks:
+  beszel-agent:
+    env:
+      BESZEL_HUB_URL: https://beszel.retn0.dev

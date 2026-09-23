@@ -3,6 +3,7 @@ name = "homelab-pyinfra"
 version = "0.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "PyYAML>=6.0,<7",
   "pyinfra==3.10.0",
 ]
 

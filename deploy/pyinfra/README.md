@@ -80,7 +80,7 @@ uv run pyinfra inventories/production.py deploys/maintenance.py \
   --limit retn0-srv-gcp-01 --serial --yes
 ```
 
-Preview the stack deployment plan for the GCP pilot, then apply it only after checking the target's existing `.env`, data directory, and Beszel identity:
+Preview a stack deployment for one cloud host, then apply it only after checking that host's existing `.env`, data directory, and Beszel identity:
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \

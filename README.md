@@ -8,7 +8,7 @@ This repository contains small, mostly independent Docker Compose stacks. Existi
 - [`hosts/`](hosts/): which host runs an adopted stack and its non-secret host-specific values.
 - [`deploy/`](deploy/): manually invoked executors that apply those definitions.
 
-Only the GCP Beszel agent is currently declared for the new deployment flow. Existing main-host services have not been moved or redeployed.
+The Beszel agents on the GCP and two OCI hosts use the new deployment flow. Existing main-host services have not been moved or redeployed.
 
 ## Table of Contents
 

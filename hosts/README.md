@@ -15,7 +15,7 @@ An empty `stacks: {}` means this repository has not adopted any Compose stacks f
 | Host | Stack placement currently managed here |
 | --- | --- |
 | `retn0-srv-main` | None yet; existing services remain in their current locations |
-| `retn0-srv-gcp-01` | `beszel-agent` pilot; applied and verified |
+| `retn0-srv-gcp-01` | `beszel-agent`; applied and verified |
 | `retn0-srv-oci-01` | `beszel-agent`; applied and verified |
 | `retn0-srv-oci-02` | `beszel-agent`; applied and verified |
 

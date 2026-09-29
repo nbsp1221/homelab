@@ -2,7 +2,9 @@
 .env
 .env.*
 !.env.example
-!**/.env.example
+
+# Private keys generated for deployments
+*.private-key.pem
 
 # Python cache
 __pycache__/
@@ -10,6 +12,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# JavaScript dependencies
+node_modules/
 
 # Log files
 *.log
@@ -30,3 +35,6 @@ Thumbs.db
 *.bak
 *.backup
 *~
+
+# Local agent session state
+/.gjc/

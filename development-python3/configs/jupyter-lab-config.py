@@ -932,7 +932,8 @@ c.ServerApp.ip = '*'
 #  Setting to an empty string disables authentication altogether, which is NOT
 #  RECOMMENDED.
 #  Default: '<generated>'
-c.ServerApp.token = 'development-python3'
+# Leave the token unset so Jupyter generates a random token at startup.
+# For a managed token, supply JUPYTER_TOKEN or JUPYTER_TOKEN_FILE privately.
 
 ## Supply overrides for the tornado.web.Application that the Jupyter server uses.
 #  Default: {}

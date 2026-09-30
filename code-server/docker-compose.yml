@@ -2,6 +2,8 @@ version: "3.8"
 services:
   code-server:
     build: .
+    environment:
+      PASSWORD: ${CODE_SERVER_PASSWORD:?set CODE_SERVER_PASSWORD in .env}
     ports:
       - "80:8080"
     volumes:

@@ -1,0 +1,35 @@
+name: pocketrisu
+
+services:
+  pocketrisu:
+    image: ghcr.io/pocketrisu/pocketrisu:v1.13.0
+    container_name: pocketrisu
+    init: true
+    restart: unless-stopped
+    expose:
+      - "6001"
+    networks:
+      - caddy-network
+    volumes:
+      - pocketrisu-data:/app/save
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:6001/manifest.json').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  caddy-network:
+    name: caddy-network
+    external: true
+
+volumes:
+  pocketrisu-data:
+    # Preserve the volume used by the existing deployment.
+    name: pocketrisu_pocketrisu-data

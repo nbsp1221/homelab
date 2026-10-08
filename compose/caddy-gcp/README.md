@@ -33,7 +33,7 @@ curl --noproxy '*' -6 --fail https://beszel.retn0.dev/api/health
 curl --noproxy '*' --fail https://beszel.retn0.dev/healthz
 ```
 
-The Hub health endpoint must return HTTP 200, and `/healthz` must return `gcp-caddy-ok`. Open the root URL to reach the Beszel UI. This Hub uses a separate database; existing agents continue reporting to `https://beszel-legacy.retn0.dev` until they are registered with the GCP Hub and receive its credentials.
+The Hub health endpoint must return HTTP 200, and `/healthz` must return `gcp-caddy-ok`. Open the root URL to reach the Beszel UI. This Hub uses a separate database and receives metrics from the GCP agent. The main-host and OCI agents continue reporting to `https://beszel-legacy.retn0.dev` until they are registered with the GCP Hub and receive its credentials.
 
 ## Local checks
 

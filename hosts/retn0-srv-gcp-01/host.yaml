@@ -2,4 +2,12 @@ provider: gcp
 stacks:
   beszel-agent:
     env:
-      BESZEL_HUB_URL: https://beszel.retn0.dev
+      BESZEL_HUB_URL: https://beszel-legacy.retn0.dev
+  caddy-gcp:
+    env:
+      CADDY_DOMAIN: beszel.retn0.dev
+      CADDY_BIND_IPV4: 100.82.114.104
+      CADDY_BIND_IPV6: fd7a:115c:a1e0::7536:7269
+  beszel-hub:
+    env:
+      BESZEL_APP_URL: https://beszel.retn0.dev

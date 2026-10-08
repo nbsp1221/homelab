@@ -1,0 +1,34 @@
+name: caddy-gcp
+
+services:
+  caddy:
+    image: ghcr.io/caddy-dns/cloudflare:v0.2.4@sha256:a875256c4a171d14cba5d8f727a9ad14ad42621997ce25565a9bc162d6cd8dfa
+    container_name: caddy-gcp
+    init: true
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:?}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?}
+    ports:
+      - "${CADDY_BIND_IPV4:?}:443:443"
+      - "[${CADDY_BIND_IPV6:?}]:443:443"
+    networks:
+      - caddy-network
+    volumes:
+      - ./config:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  caddy-network:
+    name: caddy-network
+
+volumes:
+  caddy-data:
+  caddy-config:

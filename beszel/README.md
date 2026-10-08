@@ -1,6 +1,6 @@
 # Beszel
 
-The existing main-host monitoring Hub is served at `https://beszel-legacy.retn0.dev`; set its host-local `BESZEL_APP_URL` to this URL. The GCP Hub at `https://beszel.retn0.dev` is a separate installation and receives metrics from the GCP agent. The main-host and OCI agents continue reporting here until they are registered with the GCP Hub and receive its credentials.
+The existing main-host monitoring Hub is served at `https://beszel-legacy.retn0.dev`; set its host-local `BESZEL_APP_URL` to this URL. The GCP Hub at `https://beszel.retn0.dev` is a separate installation and receives metrics from the GCP and both OCI agents. The main-host agent continues reporting here until it is registered with the GCP Hub and receives its credentials.
 
 Beszel provides a web dashboard showing host and per-container CPU, memory, network, and disk statistics with historical charts and configurable alerts.
 It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common "is everything alive and healthy?" use case.

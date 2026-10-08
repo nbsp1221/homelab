@@ -33,9 +33,7 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
     }
     for name in ("retn0-srv-oci-01", "retn0-srv-oci-02"):
         assert hosts[name]["stacks"] == {
-            "beszel-agent": {
-                "env": {"BESZEL_HUB_URL": "https://beszel-legacy.retn0.dev"}
-            }
+            "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
         }
     for config in hosts.values():
         for stack in config["stacks"]:

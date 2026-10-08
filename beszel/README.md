@@ -1,6 +1,6 @@
 # Beszel
 
-The main-host NVIDIA agent reports to the GCP Hub at `https://beszel.retn0.dev`, together with the GCP and both OCI agents. Each system has its own token. The old main-host Hub and its data are retained for rollback under the optional `legacy` profile; its URL is `https://beszel-legacy.retn0.dev`. The separate desktop will be registered later.
+The main-host NVIDIA agent reports to the GCP Hub at `https://beszel.retn0.dev`, together with the GCP and both OCI agents. Each system has its own token. The old main-host Hub is stopped, and its definition and data are retained for rollback under the optional `legacy` profile; its URL is `https://beszel-legacy.retn0.dev` when restarted. The separate desktop will be registered later.
 
 Beszel provides a web dashboard showing host and per-container CPU, memory, network, and disk statistics with historical charts and configurable alerts.
 It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common "is everything alive and healthy?" use case.

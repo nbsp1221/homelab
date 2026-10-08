@@ -2,7 +2,7 @@ name: beszel
 
 services:
   beszel:
-    image: henrygd/beszel:0.18.8
+    image: henrygd/beszel:0.21.0
     container_name: beszel
     restart: unless-stopped
     init: true
@@ -25,7 +25,7 @@ services:
       start_period: 10s
 
   beszel-agent:
-    image: henrygd/beszel-agent-nvidia:0.18.8
+    image: henrygd/beszel-agent-nvidia:0.21.0
     container_name: beszel-agent
     restart: unless-stopped
     init: true

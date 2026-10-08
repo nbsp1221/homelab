@@ -13,7 +13,7 @@ uv run pyinfra inventories/production.py deploys/stacks.py \
   --limit retn0-srv-gcp-01 --data stack=beszel-hub --serial --yes
 ```
 
-Open the HTTPS URL to create the initial administrator account using Beszel's setup screen. Account credentials and agent tokens belong in the Hub or host-local secret files, never in Compose or host definitions. The GCP and both OCI agents are registered in this Hub, each with its own system-specific token. The main-host Hub remains at `https://beszel-legacy.retn0.dev` with its existing data and main-host agent. Register the main-host system afresh and update its key, token, and Hub URL separately before moving it; existing data is not copied into this Hub.
+Open the HTTPS URL to create the initial administrator account using Beszel's setup screen. Account credentials and agent tokens belong in the Hub or host-local secret files, never in Compose or host definitions. The main-host, GCP, and both OCI agents are registered in this Hub, each with its own system-specific token. The old main-host Hub and its database are retained for rollback; existing history is not copied into this Hub. The separate desktop will be registered later.
 
 Verify the Hub through Caddy with certificate validation enabled:
 

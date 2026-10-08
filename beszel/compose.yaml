@@ -4,13 +4,14 @@ services:
   beszel:
     image: henrygd/beszel:0.21.0
     container_name: beszel
+    profiles: [legacy]
     restart: unless-stopped
     init: true
     environment:
       APP_URL: ${BESZEL_APP_URL}
       CHECK_UPDATES: "true"
     ports:
-      # Published on host loopback for access from the host-network agent.
+      # Legacy Hub access stays on host loopback.
       - "127.0.0.1:8090:8090"
     volumes:
       - beszel-data:/beszel_data
@@ -30,10 +31,10 @@ services:
     restart: unless-stopped
     init: true
     environment:
-      LISTEN: /beszel_socket/beszel.sock
       KEY: ${BESZEL_AGENT_KEY}
       TOKEN: ${BESZEL_AGENT_TOKEN}
-      HUB_URL: http://localhost:8090
+      HUB_URL: ${BESZEL_HUB_URL:?}
+      DISABLE_SSH: "true"
       FILESYSTEM: nvme0n1p5
       GPU_COLLECTOR: nvidia-smi
       # Ignore invalid readings from unused NCT6798 motherboard inputs.
@@ -57,7 +58,6 @@ services:
                 - utility
     volumes:
       - beszel-agent-data:/var/lib/beszel-agent
-      - beszel-socket:/beszel_socket
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
       - type: bind
         source: /mnt/data01/.beszel

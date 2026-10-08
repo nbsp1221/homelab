@@ -1,23 +1,22 @@
 # Beszel
 
-The existing main-host monitoring Hub is served at `https://beszel-legacy.retn0.dev`; set its host-local `BESZEL_APP_URL` to this URL. The GCP Hub at `https://beszel.retn0.dev` is a separate installation and receives metrics from the GCP and both OCI agents. The main-host agent continues reporting here until it is registered with the GCP Hub and receives its credentials.
+The main-host NVIDIA agent reports to the GCP Hub at `https://beszel.retn0.dev`, together with the GCP and both OCI agents. Each system has its own token. The old main-host Hub and its data are retained for rollback under the optional `legacy` profile; its URL is `https://beszel-legacy.retn0.dev`. The separate desktop will be registered later.
 
 Beszel provides a web dashboard showing host and per-container CPU, memory, network, and disk statistics with historical charts and configurable alerts.
 It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common "is everything alive and healthy?" use case.
 
 ## What This Stack Contains
 
-- `beszel`: Hub — PocketBase-based web dashboard (port 8090)
+- `beszel`: Optional legacy Hub — PocketBase-based web dashboard (port 8090)
 - `beszel-agent`: Agent — collects host and Docker metrics and connects to the hub over WebSocket
 - `beszel-socket-proxy`: Read-only Docker API proxy — exposes only the container endpoint on loopback
 
 ## Current Design Choices
 
-- Hub and agent run on the same host and communicate through a shared Unix socket (`./beszel_socket/beszel.sock`), following the official same-system deployment pattern.
-  The agent also maintains an outbound WebSocket to the hub via `HUB_URL`.
+- The agent connects to the remote Hub through an outbound HTTPS WebSocket using `BESZEL_HUB_URL` and a system-specific token. `DISABLE_SSH=true` disables its inbound listener, and it no longer mounts the legacy Hub's Unix socket.
 - The agent uses `network_mode: host` to read host network-interface stats.
   Because of this it cannot join Docker networks; container services are reached through host loopback.
-- The hub publishes `127.0.0.1:8090` on loopback and joins `caddy-network` for the reverse proxy.
+- The optional legacy Hub publishes `127.0.0.1:8090` on loopback and joins `caddy-network` for the reverse proxy. Normal `docker compose up -d` starts the agent and socket proxy without starting the legacy Hub.
 - The agent accesses Docker through a read-only socket proxy.
   The proxy exposes only the container API on host loopback; the agent never receives the raw Docker socket.
 - Beszel checks for new releases and shows update notifications in the UI.
@@ -36,7 +35,8 @@ They live in `compose.yaml` because this repository doubles as a shared self-hos
 - Docker Compose v2
 - NVIDIA GPU and NVIDIA Container Toolkit
 - External Docker network `caddy-network`
-- External reverse proxy configuration that routes your Beszel domain to `beszel:8090` on `caddy-network`
+- Access to the remote Hub over Tailscale and a registration for this system in that Hub
+- For the optional legacy Hub, a reverse proxy route to `beszel:8090` on `caddy-network`
 
 Create the shared proxy network once if needed:
 
@@ -49,24 +49,15 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 ```bash
 cd beszel
 cp .env.example .env
-# edit .env — at minimum set BESZEL_APP_URL
+# Register this host using Add System in the target Hub.
+# Set BESZEL_HUB_URL and copy that Hub's public key and this system's token.
+# Keep the populated .env private and outside Git history.
 
 # Create the marker directory used for additional filesystem monitoring.
 sudo mkdir -p /mnt/data01/.beszel
 
-# 1. Start the hub only
-docker compose up -d beszel
-
-# 2. Open http://localhost:8090, create an admin account
-# 3. Go to Settings > Tokens, create a universal token
-# 4. Click "Add System", copy the public key from the dialog
-# 5. Paste the token and key into .env
-
-# 6. Start the full stack
+# Start the NVIDIA agent and its Docker socket proxy.
 docker compose up -d
-
-# 7. The agent registers automatically through the universal token.
-#    Do not add the same system manually after starting the agent.
 ```
 
 ## Environment Variables
@@ -75,12 +66,23 @@ Required variables are documented in `.env.example`.
 
 | Variable | Description |
 | --- | --- |
-| `BESZEL_APP_URL` | Public URL for notification links and agent config generation |
-| `BESZEL_AGENT_TOKEN` | Universal token from Hub Settings > Tokens |
+| `BESZEL_APP_URL` | Optional legacy Hub URL for notification links |
+| `BESZEL_HUB_URL` | Remote Hub URL for the outbound WebSocket connection |
+| `BESZEL_AGENT_TOKEN` | This system's individual token from Add System |
 | `BESZEL_AGENT_KEY` | Public key from the "Add System" dialog |
 
-To auto-create the first admin account, add `USER_EMAIL` and `USER_PASSWORD` to the `beszel` service's `environment` block in `compose.yaml`.
-If omitted, the web UI will prompt you to create an account on first visit.
+Keep Hub login credentials and any one-time registration or deployment scripts outside the repository. Apply credentials from a private file and recreate only the agent through pyinfra; preserve its existing data volume and the socket proxy.
+
+## Legacy Hub and rollback
+
+The `legacy` profile follows [Docker Compose's standard optional-service mechanism](https://docs.docker.com/compose/how-tos/profiles/). It retains the Hub definition and database volume without starting the Hub during normal agent deployments.
+
+```bash
+docker compose --profile legacy up -d beszel
+docker compose --profile legacy stop beszel
+```
+
+Restarting the legacy Hub does not redirect the agent. To revert the migration, restore the previous Compose file and private `.env` from an operator-held backup, then recreate the agent while preserving `beszel-agent-data`. Never run `docker compose down --volumes`; the Hub database and agent identity must survive rollback. Leave the separate desktop's later setup outside this migration.
 
 ## Reverse Proxy
 
@@ -133,10 +135,10 @@ Validate the stack file:
 docker compose config -q
 ```
 
-Check hub health:
+Check the optional legacy Hub's health when it is running:
 
 ```bash
-docker compose exec -T beszel /beszel health --url http://localhost:8090
+docker compose --profile legacy exec -T beszel /beszel health --url http://localhost:8090
 ```
 
 Check agent health:

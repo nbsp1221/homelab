@@ -10,7 +10,7 @@ stacks:
       BESZEL_HUB_URL: https://beszel.retn0.dev
 ```
 
-An empty `stacks: {}` means this repository has not adopted any Compose stacks for automated deployment on that host. It does not mean the server is empty or that existing services should be removed. In particular, the main host's existing Beszel Hub remains managed in its current directory.
+An empty `stacks: {}` means this repository has not adopted any Compose stacks for automated deployment on that host. It does not mean the server is empty or that existing services should be removed. In particular, the main host's NVIDIA Beszel agent remains managed in its current directory.
 
 | Host | Stack placement currently managed here |
 | --- | --- |
@@ -21,6 +21,6 @@ An empty `stacks: {}` means this repository has not adopted any Compose stacks f
 
 The cloud hosts also supply the pyinfra inventory through these same files. `provider` selects the existing GCP or OCI connection defaults in `deploy/pyinfra/group_data/`. The main host is local and is not part of the cloud pyinfra inventory.
 
-The GCP Hub is served at `https://beszel.retn0.dev`. The main-host, GCP, and both OCI agents report there, each using its own system-specific token. The main-host NVIDIA agent remains managed in the existing `beszel/` project using its host-local `BESZEL_HUB_URL`; it is not part of the cloud inventory. The old Hub is stopped with its data retained for rollback, and the separate desktop will be registered later.
+The GCP Hub is served at `https://beszel.retn0.dev`. The main-host, GCP, and both OCI agents report there, each using its own system-specific token. The main-host NVIDIA agent remains managed in the existing `beszel/` project using its host-local `BESZEL_HUB_URL`; it is not part of the cloud inventory. The old Hub and its historical data have been removed. The separate desktop will be registered later.
 
 Only put non-secret values in `host.yaml`. Keep populated `.env` files and persistent data on the target host, outside Git. Removing a stack from `host.yaml` does not stop or delete it; decommissioning is a separate, deliberate operation.

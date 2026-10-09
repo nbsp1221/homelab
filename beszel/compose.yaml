@@ -1,30 +1,6 @@
 name: beszel
 
 services:
-  beszel:
-    image: henrygd/beszel:0.21.0
-    container_name: beszel
-    profiles: [legacy]
-    restart: unless-stopped
-    init: true
-    environment:
-      APP_URL: ${BESZEL_APP_URL}
-      CHECK_UPDATES: "true"
-    ports:
-      # Legacy Hub access stays on host loopback.
-      - "127.0.0.1:8090:8090"
-    volumes:
-      - beszel-data:/beszel_data
-      - beszel-socket:/beszel_socket
-    networks:
-      - caddy-network
-    healthcheck:
-      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
-      interval: 120s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
   beszel-agent:
     image: henrygd/beszel-agent-nvidia:0.21.0
     container_name: beszel-agent
@@ -91,12 +67,5 @@ services:
     tmpfs:
       - /run
 
-networks:
-  caddy-network:
-    name: caddy-network
-    external: true
-
 volumes:
-  beszel-data:
   beszel-agent-data:
-  beszel-socket:

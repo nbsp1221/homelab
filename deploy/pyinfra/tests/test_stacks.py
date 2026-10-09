@@ -1,5 +1,12 @@
-import pytest
+import runpy
+from pathlib import Path
+from types import SimpleNamespace
 
+import pyinfra
+import pytest
+from pyinfra.operations import docker, files, server
+
+from homelab_infra import hosts
 from homelab_infra.stacks import (
     StackAssets,
     load_stack_assets,
@@ -60,3 +67,52 @@ def test_initial_environment_contains_secrets_and_host_values_together() -> None
 def test_initial_environment_refuses_to_import_another_hosts_managed_values() -> None:
     with pytest.raises(ValueError, match="secret-only"):
         render_environment_seed("# BEGIN HOMELAB HOST VALUES\n", {})
+
+
+@pytest.mark.parametrize("stack", ["caddy-gcp", "beszel-agent"])
+def test_stack_apply_preserves_containers_and_reloads_only_caddy(
+    tmp_path, monkeypatch, stack
+) -> None:
+    project = tmp_path / "compose" / stack
+    project.mkdir(parents=True)
+    (project / "compose.yaml").write_text("name: example\n")
+    if stack == "caddy-gcp":
+        (project / "config").mkdir()
+        (project / "config/Caddyfile").write_text(":80 {\n respond ok\n}\n")
+        (project / "deploy.yaml").write_text(
+            "files: [config/Caddyfile]\n"
+            "checks:\n  caddy: [caddy, validate, --config, /etc/caddy/Caddyfile]\n"
+        )
+    monkeypatch.setattr(hosts, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(hosts, "load_hosts", lambda: {"test": {"stacks": {stack: {}}}})
+    monkeypatch.setattr(
+        pyinfra,
+        "host",
+        SimpleNamespace(name="test", data=SimpleNamespace(ssh_user="test")),
+    )
+    operations = []
+
+    def record(operation):
+        return lambda **kwargs: operations.append((operation, kwargs))
+
+    for operation in ("directory", "put", "file", "block"):
+        monkeypatch.setattr(files, operation, record(operation))
+    monkeypatch.setattr(server, "shell", record("shell"))
+    monkeypatch.setattr(docker, "compose", record("compose"))
+    runpy.run_path(str(Path(__file__).parents[1] / "deploys/stacks.py"))
+
+    applied = next(kwargs for op, kwargs in operations if op == "compose")
+    assert not applied.get("force_recreate", False)
+    assert applied["remove_orphans"] is False
+    names = [kwargs["name"] for _, kwargs in operations]
+    if stack == "caddy-gcp":
+        assert names.index("Validate staged caddy-gcp service caddy") < names.index(
+            "Promote validated caddy-gcp asset config/Caddyfile"
+        )
+        assert operations[-1][0] == "shell"
+        command = operations[-1][1]["commands"]
+        assert "exec -T caddy caddy reload --config /etc/caddy/Caddyfile" in command
+        assert "--force" not in command
+        assert names.index("Apply caddy-gcp Compose project") == len(names) - 2
+    else:
+        assert operations[-1][0] == "compose"

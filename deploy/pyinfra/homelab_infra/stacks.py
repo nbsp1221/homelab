@@ -9,7 +9,6 @@ import yaml
 @dataclass(frozen=True)
 class StackAssets:
     files: tuple[str, ...] = ()
-    build: bool = False
     checks: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
@@ -19,7 +18,7 @@ def load_stack_assets(project: Path) -> StackAssets:
     if not manifest.is_file():
         return StackAssets()
     config = yaml.safe_load(manifest.read_text())
-    if not isinstance(config, dict) or set(config) - {"files", "build", "checks"}:
+    if not isinstance(config, dict) or set(config) - {"files", "checks"}:
         raise ValueError(f"Invalid stack deployment manifest: {manifest}")
     paths = config.get("files", [])
     if not isinstance(paths, list) or any(not isinstance(p, str) for p in paths):
@@ -48,10 +47,9 @@ def load_stack_assets(project: Path) -> StackAssets:
             for i in range(1, len(path.parts) + 1)
         ):
             raise ValueError(f"Symlink deployment asset: {value}")
-    build = config.get("build", False)
     checks = config.get("checks", {})
-    if not isinstance(build, bool) or not isinstance(checks, dict):
-        raise ValueError(f"Invalid build or checks in {manifest}")
+    if not isinstance(checks, dict):
+        raise ValueError(f"Invalid checks in {manifest}")
     for service, command in checks.items():
         if (
             not isinstance(service, str)
@@ -61,9 +59,7 @@ def load_stack_assets(project: Path) -> StackAssets:
             or any(not isinstance(arg, str) or not arg for arg in command)
         ):
             raise ValueError(f"Invalid service check in {manifest}")
-    return StackAssets(
-        tuple(paths), build, tuple((s, tuple(c)) for s, c in checks.items())
-    )
+    return StackAssets(tuple(paths), tuple((s, tuple(c)) for s, c in checks.items()))
 
 
 def select_stacks(stacks: dict, selected: str | None) -> dict:

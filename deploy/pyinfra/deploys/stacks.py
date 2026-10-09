@@ -115,12 +115,6 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
         commands=f"{compose} config --quiet",
         _env=environment,
     )
-    if assets.build:
-        server.shell(
-            name=f"Build staged {stack} images",
-            commands=f"{compose} build",
-            _env=environment,
-        )
     for service, command in assets.checks:
         server.shell(
             name=f"Validate staged {stack} service {service}",
@@ -148,7 +142,18 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
     docker.compose(
         name=f"Apply {stack} Compose project",
         project_directory=target,
-        force_recreate=bool(assets.files),
         remove_orphans=False,
         _env=environment,
     )
+    if stack == "caddy-gcp":
+        server.shell(
+            name="Reload Caddy configuration without forcing container recreation",
+            commands=(
+                f"docker compose --project-directory {shlex.quote(target)} "
+                "exec -T caddy caddy reload --config /etc/caddy/Caddyfile"
+            ),
+            _env=environment,
+            # Compose may return before the new container's admin API is ready.
+            _retries=3,
+            _retry_delay=2,
+        )

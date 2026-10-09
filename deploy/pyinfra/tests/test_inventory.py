@@ -21,8 +21,15 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
         "retn0-srv-oci-02",
     }
     assert hosts["retn0-srv-main"]["stacks"] == {}
-    assert hosts["retn0-srv-gcp-01"]["stacks"] == {
-        "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
+    assert hosts["retn0-srv-gcp-01"]["stacks"]["beszel-agent"] == (
+        {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
+    )
+    assert hosts["retn0-srv-gcp-01"]["stacks"]["caddy-gcp"] == {
+        "env": {
+            "CADDY_DOMAIN": "beszel.retn0.dev",
+            "CADDY_BIND_IPV4": "100.82.114.104",
+            "CADDY_BIND_IPV6": "fd7a:115c:a1e0::7536:7269",
+        }
     }
     for name in ("retn0-srv-oci-01", "retn0-srv-oci-02"):
         assert hosts[name]["stacks"] == {

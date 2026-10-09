@@ -12,15 +12,14 @@ This executor manages the baseline configuration and explicitly selected Compose
 - Run operating-system package upgrades only when explicitly requested.
 - Copy and apply Compose stacks listed in `hosts/<hostname>/host.yaml` when the stack deploy is explicitly requested.
 
-Cloud resources, Tailscale enrollment, firewalls, and secrets are outside this executor. The OS baseline does not automatically deploy application stacks.
+Cloud resources, Tailscale enrollment, firewalls, and secret generation are outside this executor. Initial stack provisioning can explicitly seed an operator-provided private environment file; normal deployments preserve host-local secrets. The OS baseline does not automatically deploy application stacks.
 
 ## Controller setup
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) on
-`retn0-srv-main`, then synchronize the locked Python 3.12 environment:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) on `retn0-srv-main`, then synchronize the locked Python 3.12 environment from the repository root:
 
 ```bash
-cd /home/retn0/deploy/homelab/deploy/pyinfra
+cd deploy/pyinfra
 uv sync --locked
 ```
 
@@ -89,7 +88,13 @@ uv run pyinfra inventories/production.py deploys/stacks.py \
   --limit retn0-srv-gcp-01 --serial --yes
 ```
 
-The stack deploy synchronizes non-secret host values into a marked block of the target's existing `.env`, preserving its secret values and mode `600`. It then uploads `compose/<stack>/compose.yaml` as `compose.pending.yaml` under `/opt/stacks/<stack>/`, validates that candidate, and only then replaces the active Compose file and calls `up`. An absent `.env` stops before the active file is replaced; unlisted stacks are not stopped or deleted. The target's secrets and `data/` are neither uploaded nor replaced. The pilot only needs its Compose file; additional tracked configuration or build assets must be explicitly supported before another stack is adopted. Once applied, ordinary `docker compose` commands also work directly on the host.
+The stack deploy synchronizes non-secret host values into a marked block of the target's `.env`, preserving its secret values and mode `600`. For stacks without an `.env.example` requiring host-local secrets, it can create this file from the declared non-secret values. It then uploads `compose/<stack>/compose.yaml` as `compose.pending.yaml` under `/opt/stacks/<stack>/`, validates that candidate, and only then replaces the active Compose file and calls `up`. When an `.env.example` exists, an absent `.env` stops before the active file is replaced unless explicit seeding is requested. Unlisted stacks are not stopped or deleted. Normal deployments neither upload nor replace target secrets or `data/`. Once applied, ordinary `docker compose` commands also work directly on the host.
+
+Select one assigned stack with `--data stack=caddy-gcp` to avoid applying other projects on the selected host. The executor explicitly stages only `config/Caddyfile` alongside the GCP Caddy Compose file under `.deploy/` and runs `caddy validate` before promotion. A missing Caddyfile or a symlink at either the file or its `config/` directory stops deployment. Other stacks upload only their Compose file; environment files, private keys and runtime data are never additional deployment assets. Compose applies service or image changes without forcing unchanged containers to be recreated. The Caddy project then runs `caddy reload`; Caddy skips identical configurations without `--force`.
+
+An explicit `--data stack_env_file=/absolute/path/to/private.env` can seed an absent target `.env` for the selected stack. The local file must have private permissions, and `--diff` is rejected for this operation. Secret values and host values are uploaded together because pyinfra plans file operations before execution. Existing remote environment files are preserved. Use this only for initial provisioning; subsequent deployments do not need the local credential file.
+
+See [`compose/caddy-gcp/README.md`](../../compose/caddy-gcp/README.md) and [`compose/beszel-hub/README.md`](../../compose/beszel-hub/README.md) for the GCP HTTPS entrypoint, Hub deployment, and validation commands. Deploy `caddy-gcp` before `beszel-hub` so their shared Docker network exists.
 
 The GCP and both OCI Beszel agents have been applied and verified. Each host retains its original secret-bearing Compose file as `/opt/stacks/beszel-agent/compose.pre-iac.yaml` with mode `600` for rollback; the OCI hosts also retain `.env.pre-iac`. Do not copy these files into Git. Each agent's identity remains in `/opt/stacks/beszel-agent/data/`.
 

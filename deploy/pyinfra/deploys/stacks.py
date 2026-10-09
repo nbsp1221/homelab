@@ -31,13 +31,13 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
 
     environment = settings.get("env", {})
     target = f"/opt/stacks/{stack}"
+    ownership = {"user": host.data.ssh_user, "group": host.data.ssh_user}
     assets = load_stack_assets(source.parent)
 
     files.directory(
         name=f"Create {stack} project directory",
         path=target,
-        user=host.data.ssh_user,
-        group=host.data.ssh_user,
+        **ownership,
         mode="700",
         _sudo=True,
     )
@@ -51,8 +51,7 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
             src=StringIO(seed),
             dest=f"{target}/.env",
             add_deploy_dir=False,
-            user=host.data.ssh_user,
-            group=host.data.ssh_user,
+            **ownership,
             mode="600",
         )
     if (source.parent / ".env.example").is_file():
@@ -72,8 +71,7 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
         files.file(
             name=f"Protect {stack} environment file",
             path=f"{target}/.env",
-            user=host.data.ssh_user,
-            group=host.data.ssh_user,
+            **ownership,
             mode="600",
         )
     candidate = f"{target}/.deploy" if assets.files else target
@@ -81,35 +79,26 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
         files.directory(
             name=f"Create {stack} candidate directory",
             path=candidate,
-            user=host.data.ssh_user,
-            group=host.data.ssh_user,
+            **ownership,
             mode="700",
         )
-        for asset in assets.files:
-            files.put(
-                name=f"Stage {stack} public asset {asset}",
-                src=str(source.parent / asset),
-                dest=f"{candidate}/{asset}",
-                add_deploy_dir=False,
-                user=host.data.ssh_user,
-                group=host.data.ssh_user,
-                mode="600",
-            )
     pending = f"{candidate}/compose.pending.yaml"
     compose = shlex.join(
         ["docker", "compose", "--project-directory", candidate]
         + (["--env-file", f"{target}/.env"] if assets.files else [])
         + ["-f", pending]
     )
-    files.put(
-        name=f"Stage {stack} Compose file",
-        src=str(source),
-        dest=pending,
-        add_deploy_dir=False,
-        user=host.data.ssh_user,
-        group=host.data.ssh_user,
-        mode="600",
-    )
+    staged_files = [(asset, asset) for asset in assets.files]
+    staged_files.append(("compose.yaml", "compose.pending.yaml"))
+    for asset, destination in staged_files:
+        files.put(
+            name=f"Stage {stack} file {asset}",
+            src=str(source.parent / asset),
+            dest=f"{candidate}/{destination}",
+            add_deploy_dir=False,
+            **ownership,
+            mode="600",
+        )
     server.shell(
         name=f"Validate staged {stack} Compose configuration",
         commands=f"{compose} config --quiet",
@@ -125,8 +114,7 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
         files.directory(
             name=f"Create {stack} active asset directory for {asset}",
             path=str(Path(target, asset).parent),
-            user=host.data.ssh_user,
-            group=host.data.ssh_user,
+            **ownership,
             mode="700",
         )
         server.shell(

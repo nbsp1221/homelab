@@ -21,7 +21,7 @@ uv run pyinfra inventories/production.py deploys/stacks.py \
   --limit retn0-srv-gcp-01 --data stack=caddy-gcp --serial --yes
 ```
 
-Deploy `caddy-gcp` before [`beszel-hub`](../beszel-hub/README.md) so their shared Docker network exists. The executor validates the staged Compose and Caddy configurations, promotes the public configuration files, and applies the Compose project while preserving its volumes. It then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose) to apply the Caddyfile. Identical configurations do not force a reload or container recreation; Compose still recreates the container when its service definition or image changes. The existing Beszel agent is excluded by the stack selector.
+Deploy `caddy-gcp` before [`beszel-hub`](../beszel-hub/README.md) so their shared Docker network exists. The executor explicitly uploads only `compose.yaml` and `config/Caddyfile`, validates the staged Compose and Caddy configurations, promotes the public configuration files, and applies the Compose project while preserving its volumes. It then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose) to apply the Caddyfile. Identical configurations do not force a reload or container recreation; Compose still recreates the container when its service definition or image changes. The existing Beszel agent is excluded by the stack selector.
 
 The reload operation uses pyinfra's built-in retries, with up to three retries two seconds apart, because Compose may return before a newly started container's admin API is ready.
 

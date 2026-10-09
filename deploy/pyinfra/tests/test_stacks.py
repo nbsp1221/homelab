@@ -20,31 +20,37 @@ def test_compose_only_projects_do_not_upload_other_files(tmp_path) -> None:
     assert load_stack_assets(tmp_path) == StackAssets()
 
 
-@pytest.mark.parametrize(
-    "asset",
-    [
-        "../secret",
-        "/secret",
-        ".env",
-        "config/.env",
-        "data/id",
-        "config/key.pem",
-        "compose.yaml",
-        "config/../secret",
-    ],
-)
-def test_manifest_rejects_runtime_secrets_and_escaped_paths(tmp_path, asset) -> None:
-    (tmp_path / "deploy.yaml").write_text(f"files: ['{asset}']\n")
-    with pytest.raises(ValueError, match="Unsafe deployment asset"):
-        load_stack_assets(tmp_path)
+def test_caddy_uploads_only_its_public_configuration(tmp_path) -> None:
+    project = tmp_path / "caddy-gcp"
+    (project / "config").mkdir(parents=True)
+    (project / "config/Caddyfile").write_text(":80 { respond ok }\n")
+    (project / ".env").write_text("EXAMPLE_TOKEN=private\n")
+    (project / "config/private.key").write_text("private")
+    (project / "data").mkdir()
+    (project / "data/identity").write_text("private")
+    assert load_stack_assets(project) == StackAssets(
+        files=("config/Caddyfile",),
+        checks=(("caddy", ("caddy", "validate", "--config", "/etc/caddy/Caddyfile")),),
+    )
 
 
-def test_manifest_rejects_symlinks(tmp_path) -> None:
-    (tmp_path / "original").write_text("public")
-    (tmp_path / "Dockerfile").symlink_to(tmp_path / "original")
-    (tmp_path / "deploy.yaml").write_text("files: [Dockerfile]\n")
-    with pytest.raises(ValueError, match="Symlink deployment asset"):
-        load_stack_assets(tmp_path)
+@pytest.mark.parametrize("case", ["missing", "directory", "file-link", "parent-link"])
+def test_caddy_rejects_missing_configuration_and_symlinks(tmp_path, case) -> None:
+    project = tmp_path / "caddy-gcp"
+    project.mkdir()
+    original = tmp_path / "original"
+    original.mkdir()
+    (original / "Caddyfile").write_text("private")
+    if case == "parent-link":
+        (project / "config").symlink_to(original, target_is_directory=True)
+    else:
+        (project / "config").mkdir()
+        if case == "file-link":
+            (project / "config/Caddyfile").symlink_to(original / "Caddyfile")
+        elif case == "directory":
+            (project / "config/Caddyfile").mkdir()
+    with pytest.raises(ValueError, match="Missing or symlinked Caddyfile"):
+        load_stack_assets(project)
 
 
 def test_stack_selection_cannot_apply_an_unassigned_project() -> None:
@@ -69,8 +75,8 @@ def test_initial_environment_refuses_to_import_another_hosts_managed_values() ->
         render_environment_seed("# BEGIN HOMELAB HOST VALUES\n", {})
 
 
-@pytest.mark.parametrize("stack", ["caddy-gcp", "beszel-agent"])
-def test_stack_apply_preserves_containers_and_reloads_only_caddy(
+@pytest.mark.parametrize("stack", ["caddy-gcp", "beszel-agent", "beszel-hub"])
+def test_stack_plan_validates_before_promotion_and_reloads_only_caddy(
     tmp_path, monkeypatch, stack
 ) -> None:
     project = tmp_path / "compose" / stack
@@ -79,10 +85,6 @@ def test_stack_apply_preserves_containers_and_reloads_only_caddy(
     if stack == "caddy-gcp":
         (project / "config").mkdir()
         (project / "config/Caddyfile").write_text(":80 {\n respond ok\n}\n")
-        (project / "deploy.yaml").write_text(
-            "files: [config/Caddyfile]\n"
-            "checks:\n  caddy: [caddy, validate, --config, /etc/caddy/Caddyfile]\n"
-        )
     monkeypatch.setattr(hosts, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(hosts, "load_hosts", lambda: {"test": {"stacks": {stack: {}}}})
     monkeypatch.setattr(
@@ -105,6 +107,23 @@ def test_stack_apply_preserves_containers_and_reloads_only_caddy(
     assert not applied.get("force_recreate", False)
     assert applied["remove_orphans"] is False
     names = [kwargs["name"] for _, kwargs in operations]
+    uploads = [kwargs for op, kwargs in operations if op == "put"]
+    assert {
+        Path(upload["src"]).relative_to(project).as_posix() for upload in uploads
+    } == (
+        {"config/Caddyfile", "compose.yaml"}
+        if stack == "caddy-gcp"
+        else {"compose.yaml"}
+    )
+    assert all(upload["mode"] == "600" for upload in uploads)
+    assert all(
+        kwargs["mode"] == "700" for op, kwargs in operations if op == "directory"
+    )
+    assert (
+        names.index(f"Validate staged {stack} Compose configuration")
+        < names.index(f"Promote validated {stack} Compose file")
+        < names.index(f"Apply {stack} Compose project")
+    )
     if stack == "caddy-gcp":
         assert names.index("Validate staged caddy-gcp service caddy") < names.index(
             "Promote validated caddy-gcp asset config/Caddyfile"

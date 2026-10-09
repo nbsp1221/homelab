@@ -1,5 +1,0 @@
-# Explicit public assets; .env and runtime data are never deployment assets.
-files:
-  - config/Caddyfile
-checks:
-  caddy: [caddy, validate, --config, /etc/caddy/Caddyfile]

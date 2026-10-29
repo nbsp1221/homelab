@@ -12,7 +12,11 @@ Named volumes preserve certificate and ACME state under `/data` and Caddy runtim
 
 ## Deploy from the controller
 
-Run from `deploy/pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file:
+Run from `deploy/pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file.
+
+Before deploying this stack, apply the [Docker startup dependency](../../deploy/pyinfra/README.md#docker-startup-on-the-gcp-monitoring-host) through the baseline or the dedicated `deploys/docker_startup.py` entrypoint. It makes Docker wait for both declared Tailscale listener addresses before restoring containers at boot. Applying the dedicated entrypoint does not restart Docker; the dependency becomes effective on its next activation. If Tailscale is unavailable, all Docker containers on this monitoring host wait and Docker retries automatically.
+
+Preview and apply the Caddy stack:
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \

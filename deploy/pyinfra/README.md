@@ -9,6 +9,7 @@ This executor manages the baseline configuration and explicitly selected Compose
 - Maintain a 2 GiB disk-backed swap file.
 - Install current Docker Engine and Docker Compose from Docker's official
   repository.
+- Configure Docker startup to wait for the declared Tailscale listeners on hosts running `caddy-gcp`.
 - Run operating-system package upgrades only when explicitly requested.
 - Copy and apply Compose stacks listed in `hosts/<hostname>/host.yaml` when the stack deploy is explicitly requested.
 
@@ -78,6 +79,40 @@ Apply explicit package maintenance:
 uv run pyinfra inventories/production.py deploys/maintenance.py \
   --limit retn0-srv-gcp-01 --serial --yes
 ```
+
+### Docker startup on the GCP monitoring host
+
+Docker binds Caddy's published host ports before Caddy starts. The ordinary `network-online.target` and `After=tailscaled.service` do not guarantee that Tailscale addresses exist yet, so a container healthcheck or Compose `depends_on` cannot fix this boot race.
+
+The baseline installs `/etc/systemd/system/docker.service.d/10-homelab-tailscale.conf` before managing Docker packages or starting Docker. Hosts assigned `caddy-gcp` opt in through their existing stack placement; its `CADDY_BIND_IPV4` and `CADDY_BIND_IPV6` values are the only address source. Other hosts do not acquire this dependency. Removing that placement removes only this executor's drop-in, without deleting stacks or other Docker configuration.
+
+The drop-in runs the official [`tailscale wait --timeout=60s`](https://tailscale.com/docs/reference/tailscale-cli#wait) in Docker's `ExecStartPre`, followed by checks that both declared addresses exist on `tailscale0` and are neither tentative nor DAD-failed. [Tailscale 1.102.3's implementation](https://github.com/tailscale/tailscale/blob/v1.102.3/cmd/tailscale/cli/wait.go) checks only the first assigned IP, so both interface checks are necessary. Every Docker activation, including socket activation, goes through these checks before restoring containers. Tailscale enrollment remains outside this executor; a missing `wait` command, daemon unit, or required utility stops planning before the drop-in is written.
+
+An unsuccessful pre-start check prevents `dockerd` from starting. [`Restart=always`](https://www.freedesktop.org/software/systemd/man/systemd.service.html#Restart=) retries after 10 seconds, with start-rate limiting disabled so repeated early failures do not exhaust Docker's default three-attempt limit. Each readiness wait is capped at 60 seconds; there is no overall retry deadline. **All Docker containers on this host wait while Tailscale is unavailable or a declared address is incorrect.** The checks establish local address readiness, not DNS, peer connectivity, or application health. Existing Docker container restart policies remain responsible for restoring the applications.
+
+For an existing host, preview and apply just this configuration without package upgrades, stack deployment, or Docker restart:
+
+```bash
+uv run pyinfra inventories/production.py deploys/docker_startup.py \
+  --limit retn0-srv-gcp-01 --dry --diff --serial
+uv run pyinfra inventories/production.py deploys/docker_startup.py \
+  --limit retn0-srv-gcp-01 --serial --yes
+```
+
+The dedicated deploy reloads systemd only when its managed file changes. It does not start, stop, or restart Docker, Tailscale, or any container. A second apply should report zero changed operations. The guard takes effect on the next Docker activation; an approved maintenance restart or reboot is required to prove the complete boot path.
+
+After applying, inspect the loaded configuration on the target without restarting services:
+
+```bash
+sudo systemd-analyze verify docker.service
+sudo systemctl cat docker.service
+sudo systemctl show docker.service \
+  -p DropInPaths -p ExecStartPre -p Restart -p RestartUSec -p StartLimitIntervalUSec
+```
+
+Expect the managed drop-in, all three pre-start commands, `Restart=always`, `RestartUSec=10s`, and `StartLimitIntervalUSec=0`. After an approved restart or reboot, also check the Docker journal and the IPv4/IPv6 HTTPS health endpoints documented in the [Caddy project](../../compose/caddy-gcp/README.md#verify). To roll back the dependency, remove only `10-homelab-tailscale.conf` and reload systemd during an approved configuration change; do not disable Docker or change its other drop-ins.
+
+### Compose stacks
 
 Preview a stack deployment for one cloud host, then apply it only after checking that host's existing `.env`, data directory, and Beszel identity:
 

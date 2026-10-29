@@ -9,6 +9,7 @@ This executor manages the baseline configuration and explicitly selected Compose
 - Maintain a 2 GiB disk-backed swap file.
 - Install current Docker Engine and Docker Compose from Docker's official
   repository.
+- Manage the GCP host's systemd-resolved/Tailscale DNS integration through a dedicated, IAP-guarded deployment with local rollback and DNS verification.
 - Configure Docker startup to wait for the declared Tailscale listeners on hosts running `caddy-gcp`.
 - Run operating-system package upgrades only when explicitly requested.
 - Copy and apply Compose stacks listed in `hosts/<hostname>/host.yaml` when the stack deploy is explicitly requested.
@@ -79,6 +80,8 @@ Apply explicit package maintenance:
 uv run pyinfra inventories/production.py deploys/maintenance.py \
   --limit retn0-srv-gcp-01 --serial --yes
 ```
+
+For the GCP resolver policy, use the dedicated [DNS migration and verification procedure](DNS.md). It requires independent IAP access when changes are needed because Tailscale briefly stops. `deploys/dns.py` avoids Docker upgrades and application deployment; `deploys/verify_dns.py` checks both resolver paths and `deploys/verify_monitoring.py` checks TLS, the proxy and the Hub over both address families. After DNS is converged, an ordinary baseline run can use the existing Tailscale transport without another DNS migration.
 
 ### Docker startup on the GCP monitoring host
 

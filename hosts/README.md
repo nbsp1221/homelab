@@ -21,7 +21,9 @@ An empty `stacks: {}` means this repository has not adopted any Compose stacks f
 
 The cloud hosts also supply the pyinfra inventory through these same files. `provider` selects the existing GCP or OCI connection defaults in `deploy/pyinfra/group_data/`. The main host is local and is not part of the cloud pyinfra inventory.
 
-Assigning `caddy-gcp` also opts the host into the [Docker startup dependency](../deploy/pyinfra/README.md#docker-startup-on-the-gcp-monitoring-host). pyinfra derives the required Tailscale addresses from that stack's declared listener values; all Docker containers on the host wait for those addresses before starting.
+The optional `docker` host policy controls the [Docker startup dependency](../deploy/pyinfra/README.md#docker-startup-on-the-gcp-monitoring-host), independently of stack names or placement. `wait_for_tailscale: true` makes Docker wait for `tailscale_bind_addresses`. Omitting `docker` leaves existing configuration unmanaged; only an explicit `wait_for_tailscale: false` disables this executor's drop-in. Removing a stack assignment never removes the host policy.
+
+The GCP definition declares each listener address once in that policy and shares it with the Caddy environment through standard YAML anchors and aliases. Change the anchor value when changing an address. Apply the host startup policy before deploying stacks; the stack executor checks both the file and the loaded systemd configuration before writing application files.
 
 The GCP Hub is served at `https://beszel.retn0.dev`. The main-host, GCP, and both OCI agents report there, each using its own system-specific token. The main-host NVIDIA agent remains managed in the existing `beszel/` project using its host-local `BESZEL_HUB_URL`; it is not part of the cloud inventory. The old Hub and its historical data have been removed. The separate desktop will be registered later.
 

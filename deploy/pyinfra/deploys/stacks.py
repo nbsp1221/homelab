@@ -7,6 +7,7 @@ from pyinfra import host, state
 from pyinfra.facts.files import File
 from pyinfra.operations import docker, files, server
 
+from homelab_infra.docker_startup import require_docker_startup
 from homelab_infra.hosts import REPO_ROOT, load_hosts
 from homelab_infra.stacks import (
     load_stack_assets,
@@ -23,6 +24,8 @@ if env_source:
     env_source = Path(env_source).expanduser().resolve()
     if not env_source.is_file() or env_source.stat().st_mode & 0o077:
         raise ValueError("Environment source must be a private local file (mode 600)")
+
+require_docker_startup(definition)
 
 for stack, settings in select_stacks(definition["stacks"], selected).items():
     source = REPO_ROOT / "compose" / stack / "compose.yaml"

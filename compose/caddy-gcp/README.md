@@ -14,7 +14,7 @@ Named volumes preserve certificate and ACME state under `/data` and Caddy runtim
 
 Run from `deploy/pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file.
 
-Before deploying this stack, apply the [Docker startup dependency](../../deploy/pyinfra/README.md#docker-startup-on-the-gcp-monitoring-host) through the baseline or the dedicated `deploys/docker_startup.py` entrypoint. It makes Docker wait for both declared Tailscale listener addresses before restoring containers at boot. Applying the dedicated entrypoint does not restart Docker; the dependency becomes effective on its next activation. If Tailscale is unavailable, all Docker containers on this monitoring host wait and Docker retries automatically.
+Before deploying this stack, apply the [Docker startup dependency](../../deploy/pyinfra/README.md#docker-startup-on-the-gcp-monitoring-host) through the baseline or the dedicated `deploys/docker_startup.py` entrypoint. The host declares its required addresses under `docker.tailscale_bind_addresses` and shares them with this stack's environment using YAML aliases. Change those source values and apply the host policy before deploying a listener address change; the stack deploy stops before application writes if the file or loaded systemd policy differs. Applying the dedicated entrypoint does not restart Docker; the dependency becomes effective on its next activation. If Tailscale is unavailable, all Docker containers on this monitoring host wait and Docker retries automatically.
 
 Preview and apply the Caddy stack:
 

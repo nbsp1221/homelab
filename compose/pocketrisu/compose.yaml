@@ -23,5 +23,3 @@ networks:
 
 volumes:
   pocketrisu-data:
-    # Preserve the volume used by the existing deployment.
-    name: pocketrisu_pocketrisu-data

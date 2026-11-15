@@ -1,9 +1,4 @@
 provider: gcp
-docker:
-  wait_for_tailscale: true
-  tailscale_bind_addresses:
-    - &tailscale_ipv4 100.82.114.104
-    - &tailscale_ipv6 fd7a:115c:a1e0::7536:7269
 stacks:
   beszel-agent:
     env:
@@ -11,8 +6,8 @@ stacks:
   caddy-gcp:
     env:
       CADDY_DOMAIN: beszel.retn0.dev
-      CADDY_BIND_IPV4: *tailscale_ipv4
-      CADDY_BIND_IPV6: *tailscale_ipv6
+      CADDY_BIND_IPV4: 100.82.114.104
+      CADDY_BIND_IPV6: fd7a:115c:a1e0::7536:7269
   beszel-hub:
     env:
       BESZEL_APP_URL: https://beszel.retn0.dev

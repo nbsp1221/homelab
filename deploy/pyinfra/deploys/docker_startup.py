@@ -1,3 +1,0 @@
-from homelab_infra.docker_startup import configure_docker_startup
-
-configure_docker_startup()

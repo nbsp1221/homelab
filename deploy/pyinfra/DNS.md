@@ -51,7 +51,7 @@ DNS verification requires the stub link, both enabled/running services and Tails
 
 Run `deploys/dns.py` again after a successful apply; it should plan zero operations and avoid another Tailscale restart. The general baseline reuses the same policy, but **do not apply the entire baseline merely to fix DNS**: its separate Docker operations may upgrade packages or start Docker. `deploys/verify.py` also includes the DNS policy checks for opted-in hosts; use `verify_dns.py` to avoid unrelated Docker version checks when validating just this change.
 
-During an approved later reboot, confirm resolved/Tailscale remain healthy, the daemon selects `systemd-resolved` DNS mode, all three probe categories still resolve, and the dual-stack monitoring checks succeed. A current runtime check does not establish persistence through reboot. Docker's separate startup gate is managed by `deploys/docker_startup.py` and must not be silently applied as part of DNS migration.
+During an approved later reboot, confirm resolved/Tailscale remain healthy, the daemon selects `systemd-resolved` DNS mode, all three probe categories still resolve, and the dual-stack monitoring checks succeed. A current runtime check does not establish persistence through reboot.
 
 ## Manual recovery
 

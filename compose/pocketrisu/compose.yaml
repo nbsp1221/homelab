@@ -13,20 +13,12 @@ services:
     volumes:
       - pocketrisu-data:/app/save
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - >-
-          fetch('http://127.0.0.1:6001/manifest.json').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
-      interval: 30s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6001/manifest.json').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       timeout: 10s
-      retries: 3
       start_period: 30s
 
 networks:
   caddy-network:
-    name: caddy-network
     external: true
 
 volumes:

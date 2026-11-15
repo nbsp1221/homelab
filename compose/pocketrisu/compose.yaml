@@ -2,7 +2,7 @@ name: pocketrisu
 
 services:
   pocketrisu:
-    image: ghcr.io/pocketrisu/pocketrisu:v1.13.0
+    image: ghcr.io/pocketrisu/pocketrisu:v1.17.0
     container_name: pocketrisu
     init: true
     restart: unless-stopped

@@ -1,6 +1,6 @@
-# Beszel
+# Beszel NVIDIA Agent
 
-The main-host NVIDIA agent reports to the GCP Hub at `https://beszel.retn0.dev`, together with the GCP and both OCI agents. Each system has its own token. The old main-host Hub, its database and socket volumes, and the migration database archive have been removed. Historical data is not imported into the new Hub. The separate desktop will be registered later.
+The NVIDIA agent on `retn0-srv-main` reports to the [GCP Hub](../beszel-hub/README.md) at `https://beszel.retn0.dev`. The GCP and OCI hosts use the [cloud agent definition](../beszel-agent/README.md). Each system has its own token.
 
 Beszel provides a web dashboard showing host and per-container CPU, memory, network, and disk statistics with historical charts and configurable alerts.
 It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common "is everything alive and healthy?" use case.
@@ -33,10 +33,14 @@ They live in `compose.yaml` because this repository doubles as a shared self-hos
 - NVIDIA GPU and NVIDIA Container Toolkit
 - Access to the remote Hub over Tailscale and a registration for this system in that Hub
 
-## Quick Start
+## Komodo
+
+Select `retn0-srv-main` and the homelab Git repository. Set the run directory to `compose/beszel-agent-nvidia` and the Compose project name to `beszel`, matching the existing deployment. Reuse this host's Hub URL, public key, and token in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
+
+## Manual deployment
 
 ```bash
-cd beszel
+cd compose/beszel-agent-nvidia
 cp .env.example .env
 # Register this host using Add System in the target Hub.
 # Set BESZEL_HUB_URL and copy that Hub's public key and this system's token.
@@ -59,11 +63,11 @@ Required variables are documented in `.env.example`.
 | `BESZEL_AGENT_TOKEN` | This system's individual token from Add System |
 | `BESZEL_AGENT_KEY` | Public key from the "Add System" dialog |
 
-Keep Hub login credentials and any one-time registration or deployment scripts outside the repository. Apply credentials from a private file and recreate only the agent through pyinfra; preserve its existing data volume and the socket proxy.
+Keep the token and any registration scripts outside Git. For manual deployments, supply the values in a private `.env` beside the Compose file.
 
 ## Persistent state
 
-Keep `beszel-agent-data` across agent deployments; it stores the current agent's persistent identity. Never run `docker compose down --volumes` during updates. The active Hub's database is managed separately by [`compose/beszel-hub`](../compose/beszel-hub/README.md).
+The `beszel` Compose project resolves `beszel-agent-data` to the existing `beszel_beszel-agent-data` volume, which stores the agent's persistent identity. Keep this volume across deployments.
 
 ## Notifications
 

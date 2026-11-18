@@ -1,0 +1,16 @@
+{
+	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	auto_https disable_redirects
+}
+
+{$CADDY_DOMAIN} {
+	respond /healthz "gcp-caddy-ok" 200
+	request_body {
+		max_size 10MB
+	}
+	reverse_proxy beszel-hub:8090 {
+		transport http {
+			read_timeout 360s
+		}
+	}
+}

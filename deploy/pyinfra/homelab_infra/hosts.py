@@ -23,7 +23,11 @@ def load_hosts(hosts_dir: Path = HOSTS_DIR) -> dict[str, dict]:
                 r"[a-z0-9]+(?:-[a-z0-9]+)*", stack
             ):
                 raise ValueError(f"Invalid stack name in {path}: {stack}")
-            if not isinstance(settings, dict) or set(settings) - {"env"}:
+            if (
+                not isinstance(settings, dict)
+                or set(settings) - {"bootstrap", "env"}
+                or not isinstance(settings.get("bootstrap", False), bool)
+            ):
                 raise ValueError(f"Invalid settings for {stack} in {path}")
             env = settings.get("env", {})
             if not isinstance(env, dict) or any(

@@ -1,9 +1,12 @@
 import runpy
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pyinfra
 import pytest
+from pyinfra.facts.files import File
+from pyinfra.facts.server import Home
 from pyinfra.operations import docker, files, server
 
 from homelab_infra import hosts
@@ -73,6 +76,73 @@ def test_initial_environment_contains_secrets_and_host_values_together() -> None
 def test_initial_environment_refuses_to_import_another_hosts_managed_values() -> None:
     with pytest.raises(ValueError, match="secret-only"):
         render_environment_seed("# BEGIN HOMELAB HOST VALUES\n", {})
+
+
+@pytest.mark.parametrize("has_env", [False, True])
+def test_periphery_bootstrap_uses_ssh_home_and_only_seeds_missing_env(
+    tmp_path, monkeypatch, has_env
+) -> None:
+    name = "fake-cloud-host"
+    user = "ssh-user"
+    stack = "komodo-periphery"
+    home = "/custom/home/ssh-user"
+    target = f"{home}/compose/{stack}"
+    environment = {"PERIPHERY_CONNECT_AS": name}
+    seed = tmp_path / "private.env"
+    seed.write_text("PERIPHERY_ONBOARDING_KEY=test-placeholder\n")
+    seed.chmod(0o600)
+    monkeypatch.setattr(
+        hosts,
+        "load_hosts",
+        lambda: {name: {"stacks": {stack: {"bootstrap": True, "env": environment}}}},
+    )
+
+    def get_fact(fact, **kwargs):
+        if fact is Home:
+            assert kwargs == {"user": user}
+            return home
+        assert fact is File and kwargs == {"path": f"{target}/.env"}
+        return {"mode": 600} if has_env else None
+
+    monkeypatch.setattr(
+        pyinfra,
+        "host",
+        SimpleNamespace(
+            name=name,
+            data=SimpleNamespace(ssh_user=user, stack=stack, stack_env_file=str(seed)),
+            get_fact=get_fact,
+        ),
+    )
+    monkeypatch.setattr(
+        pyinfra, "state", SimpleNamespace(config=SimpleNamespace(DIFF=False))
+    )
+    for operation in ("directory", "put", "file", "block"):
+        monkeypatch.setattr(files, operation, Mock())
+    monkeypatch.setattr(server, "shell", Mock())
+    monkeypatch.setattr(docker, "compose", Mock())
+    runpy.run_path(str(Path(__file__).parents[1] / "deploys/stacks.py"))
+
+    directory = files.directory.call_args.kwargs
+    assert (directory["path"], directory["user"], directory["_sudo"]) == (
+        target,
+        user,
+        False,
+    )
+    assert docker.compose.call_args.kwargs["project_directory"] == target
+    env_uploads = [
+        call.kwargs
+        for call in files.put.call_args_list
+        if call.kwargs["dest"].endswith("/.env")
+    ]
+    if has_env:
+        assert not env_uploads
+        assert files.block.call_args.kwargs["path"] == f"{target}/.env"
+    else:
+        (upload,) = env_uploads
+        assert upload["mode"] == "600"
+        assert "PERIPHERY_ONBOARDING_KEY=test-placeholder" in upload["src"].getvalue()
+        assert f'PERIPHERY_CONNECT_AS="{name}"' in upload["src"].getvalue()
+        files.block.assert_not_called()
 
 
 @pytest.mark.parametrize("stack", ["caddy-gcp", "beszel-agent", "beszel-hub"])

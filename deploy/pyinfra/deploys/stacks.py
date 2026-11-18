@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pyinfra import host, state
 from pyinfra.facts.files import File
+from pyinfra.facts.server import Home
 from pyinfra.operations import docker, files, server
 
 from homelab_infra.hosts import REPO_ROOT, load_hosts
@@ -30,7 +31,13 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
         raise ValueError(f"Missing Compose project: {source}")
 
     environment = settings.get("env", {})
+    bootstrap = settings.get("bootstrap", False)
     target = f"/opt/stacks/{stack}"
+    if bootstrap:
+        home = host.get_fact(Home, user=host.data.ssh_user)
+        if not home or not Path(home).is_absolute():
+            raise ValueError(f"Cannot resolve home for {host.data.ssh_user}")
+        target = f"{home}/compose/{stack}"
     ownership = {"user": host.data.ssh_user, "group": host.data.ssh_user}
     assets = load_stack_assets(source.parent)
 
@@ -39,7 +46,7 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
         path=target,
         **ownership,
         mode="700",
-        _sudo=True,
+        _sudo=not bootstrap,
     )
     seeding = env_source and not host.get_fact(File, path=f"{target}/.env")
     if seeding:
@@ -57,7 +64,7 @@ for stack, settings in select_stacks(definition["stacks"], selected).items():
     if (source.parent / ".env.example").is_file():
         server.shell(
             name=f"Require host-local {stack} environment file",
-            commands=f"test -f {target}/.env",
+            commands=shlex.join(["test", "-f", f"{target}/.env"]),
         )
     if environment and not seeding:
         files.block(

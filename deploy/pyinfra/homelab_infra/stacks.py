@@ -22,9 +22,15 @@ def load_stack_assets(project: Path) -> StackAssets:
 
 
 def select_stacks(stacks: dict, selected: str | None) -> dict:
-    if selected is not None and selected not in stacks:
+    if selected is None:
+        return {
+            stack: settings
+            for stack, settings in stacks.items()
+            if not settings.get("bootstrap", False)
+        }
+    if selected not in stacks:
         raise ValueError(f"Stack is not assigned to this host: {selected}")
-    return stacks if selected is None else {selected: stacks[selected]}
+    return {selected: stacks[selected]}
 
 
 def render_environment_seed(secret_contents: str, environment: dict[str, str]) -> str:

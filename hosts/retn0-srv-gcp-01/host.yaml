@@ -11,3 +11,8 @@ stacks:
   beszel-hub:
     env:
       BESZEL_APP_URL: https://beszel.retn0.dev
+  komodo-periphery:
+    bootstrap: true
+    env:
+      PERIPHERY_CORE_ADDRESS: https://komodo.retn0.dev
+      PERIPHERY_CONNECT_AS: retn0-srv-gcp-01

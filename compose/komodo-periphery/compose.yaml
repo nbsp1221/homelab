@@ -1,0 +1,24 @@
+name: komodo-periphery
+
+services:
+  # composelint-disable-next-line require-healthcheck -- Core reports the outbound Periphery connection.
+  periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2
+    container_name: komodo-periphery
+    init: true
+    restart: unless-stopped
+    environment:
+      PERIPHERY_CORE_ADDRESS: ${PERIPHERY_CORE_ADDRESS:?}
+      PERIPHERY_CONNECT_AS: ${PERIPHERY_CONNECT_AS:?}
+      PERIPHERY_ONBOARDING_KEY:
+      PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
+      PERIPHERY_ROOT_DIRECTORY: ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+      PERIPHERY_INCLUDE_DISK_MOUNTS: /etc/hostname
+    volumes:
+      - keys:/config/keys
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+
+volumes:
+  keys:

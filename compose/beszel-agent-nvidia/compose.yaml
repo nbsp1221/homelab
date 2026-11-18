@@ -4,8 +4,11 @@ services:
   beszel-agent:
     image: henrygd/beszel-agent-nvidia:0.21.0
     container_name: beszel-agent
-    restart: unless-stopped
+    depends_on:
+      beszel-socket-proxy:
+        condition: service_started
     init: true
+    restart: unless-stopped
     environment:
       KEY: ${BESZEL_AGENT_KEY}
       TOKEN: ${BESZEL_AGENT_TOKEN}
@@ -18,20 +21,7 @@ services:
       SMART_DEVICES: /dev/nvme0:nvme,/dev/sda:sat
       DOCKER_HOST: tcp://127.0.0.1:2375
       SERVICE_PATTERNS: "containerd*,docker*,fail2ban*,nvidia-persistenced*,smartmontools*,smbd*,ssh*,tailscaled*"
-    cap_add:
-      - SYS_ADMIN
-      - SYS_RAWIO
-    devices:
-      - /dev/nvme0:/dev/nvme0
-      - /dev/sda:/dev/sda
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities:
-                - utility
+    network_mode: host # composelint-disable-line no-host-network -- host interface metrics require it; SSH is disabled
     volumes:
       - beszel-agent-data:/var/lib/beszel-agent
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
@@ -41,17 +31,28 @@ services:
         read_only: true
         bind:
           create_host_path: false
-    depends_on:
-      beszel-socket-proxy:
-        condition: service_started
-    network_mode: host
+    devices:
+      - /dev/nvme0:/dev/nvme0
+      - /dev/sda:/dev/sda
     healthcheck:
       test: ["CMD", "/agent", "health"]
       interval: 120s
       timeout: 5s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities:
+                - utility
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RAWIO
 
+  # composelint-disable-next-line require-healthcheck -- verify the proxy through Docker metrics in the Hub.
   beszel-socket-proxy:
     image: lscr.io/linuxserver/socket-proxy:3.4.2
     container_name: beszel-socket-proxy
@@ -63,9 +64,9 @@ services:
       - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    read_only: true
     tmpfs:
       - /run
+    read_only: true
 
 volumes:
   beszel-agent-data:

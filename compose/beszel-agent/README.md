@@ -1,6 +1,6 @@
 # Beszel cloud agent
 
-This standalone Compose project runs an outbound-only Beszel agent on a cloud host. The Hub and NVIDIA-specific main-host agent remain in [`beszel/`](../../beszel/README.md). Placement and Hub URLs for the GCP and two OCI agents are declared in their respective [`hosts/`](../../hosts/README.md) definitions; do not deploy a second agent on any of these hosts.
+This Compose project runs an outbound-only Beszel agent on the GCP and OCI hosts. Placement and Hub URLs are declared in [`hosts/`](../../hosts/README.md). The agents report to the [GCP Hub](../beszel-hub/README.md). The main host uses the [NVIDIA agent definition](../beszel-agent-nvidia/README.md).
 
 The agent uses host networking for host interface metrics, but `DISABLE_SSH=true` disables its inbound SSH listener. Each host's `BESZEL_HUB_URL` selects the Hub for its outbound WebSocket connection. The GCP Hub and the main-host legacy Hub have separate databases and credentials; changing the URL alone does not register an agent with the new Hub.
 

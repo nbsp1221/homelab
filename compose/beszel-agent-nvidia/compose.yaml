@@ -1,4 +1,4 @@
-name: beszel
+name: beszel-agent-nvidia
 
 services:
   beszel-agent:

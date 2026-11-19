@@ -35,7 +35,7 @@ They live in `compose.yaml` because this repository doubles as a shared self-hos
 
 ## Komodo
 
-Select `retn0-srv-main` and the homelab Git repository. Set the run directory to `compose/beszel-agent-nvidia` and the Compose project name to `beszel`, matching the existing deployment. Reuse this host's Hub URL, public key, and token in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
+Create a Stack named `beszel-agent-nvidia` on `retn0-srv-main` with the `homelab` Repo and `compose/beszel-agent-nvidia` as the run directory. Use the default Project Name so Komodo and Docker Compose use the same project name. Reuse the existing system's Hub URL, public key, and token. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
 
 ## Manual deployment
 
@@ -67,7 +67,7 @@ Keep the token and any registration scripts outside Git. For manual deployments,
 
 ## Persistent state
 
-The `beszel` Compose project resolves `beszel-agent-data` to the existing `beszel_beszel-agent-data` volume, which stores the agent's persistent identity. Keep this volume across deployments.
+The `beszel-agent-nvidia` project stores the agent's persistent identity in `beszel-agent-nvidia_beszel-agent-data`. When migrating from the `beszel` project, copy the existing state from `beszel_beszel-agent-data` before starting the new project. The old and new projects use the same container names, so take the old project down with its volume intact before deploying the new one.
 
 ## Notifications
 

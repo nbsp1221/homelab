@@ -4,6 +4,7 @@ from group_data import all as all_data
 from group_data import gcp as gcp_data
 from group_data import oci as oci_data
 from homelab_infra.hosts import REPO_ROOT, load_hosts
+from homelab_infra.stacks import select_stacks
 from inventories.production import gcp, oci
 
 
@@ -32,12 +33,26 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
         }
     }
     for name in ("retn0-srv-oci-01", "retn0-srv-oci-02"):
-        assert hosts[name]["stacks"] == {
+        assert select_stacks(hosts[name]["stacks"], None) == {
             "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
         }
     for config in hosts.values():
         for stack in config["stacks"]:
             assert (REPO_ROOT / "compose" / stack / "compose.yaml").is_file()
+
+
+@pytest.mark.parametrize("name", [*gcp, *oci])
+def test_cloud_inventory_assigns_periphery_as_an_explicit_bootstrap(name) -> None:
+    stacks = load_hosts()[name]["stacks"]
+    assert stacks["komodo-periphery"] == {
+        "bootstrap": True,
+        "env": {
+            "PERIPHERY_CORE_ADDRESS": "https://komodo.retn0.dev",
+            "PERIPHERY_CONNECT_AS": name,
+        },
+    }
+    assert "komodo-periphery" not in select_stacks(stacks, None)
+    assert list(select_stacks(stacks, "komodo-periphery")) == ["komodo-periphery"]
 
 
 def test_host_definitions_reject_invalid_stack_paths(tmp_path) -> None:

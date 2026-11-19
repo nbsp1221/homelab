@@ -1,4 +1,4 @@
-name: beszel
+name: beszel-agent-nvidia
 
 services:
   beszel-agent:
@@ -10,8 +10,8 @@ services:
     init: true
     restart: unless-stopped
     environment:
-      KEY: ${BESZEL_AGENT_KEY}
-      TOKEN: ${BESZEL_AGENT_TOKEN}
+      KEY: ${BESZEL_AGENT_KEY:?}
+      TOKEN_FILE: /run/secrets/beszel_agent_token
       HUB_URL: ${BESZEL_HUB_URL:?}
       DISABLE_SSH: "true"
       FILESYSTEM: nvme0n1p5
@@ -21,6 +21,8 @@ services:
       SMART_DEVICES: /dev/nvme0:nvme,/dev/sda:sat
       DOCKER_HOST: tcp://127.0.0.1:2375
       SERVICE_PATTERNS: "containerd*,docker*,fail2ban*,nvidia-persistenced*,smartmontools*,smbd*,ssh*,tailscaled*"
+    secrets:
+      - beszel_agent_token
     network_mode: host # composelint-disable-line no-host-network -- host interface metrics require it; SSH is disabled
     volumes:
       - beszel-agent-data:/var/lib/beszel-agent
@@ -70,3 +72,7 @@ services:
 
 volumes:
   beszel-agent-data:
+
+secrets:
+  beszel_agent_token:
+    file: /etc/komodo/secrets/beszel-agent-nvidia.token

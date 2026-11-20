@@ -8,12 +8,14 @@ services:
     restart: unless-stopped
     environment:
       KEY: ${BESZEL_AGENT_KEY:?}
-      TOKEN: ${BESZEL_AGENT_TOKEN:?}
+      TOKEN_FILE: /run/secrets/beszel_agent_token
       HUB_URL: ${BESZEL_HUB_URL:?}
       DISABLE_SSH: "true"
+    secrets:
+      - beszel_agent_token
     network_mode: host # composelint-disable-line no-host-network -- host interface metrics require it; SSH is disabled
     volumes:
-      - ./data:/var/lib/beszel-agent
+      - beszel-agent-data:/var/lib/beszel-agent
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: ["CMD", "/agent", "health"]
@@ -21,3 +23,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  beszel-agent-data:
+
+secrets:
+  beszel_agent_token:
+    file: /etc/komodo/secrets/beszel-agent.token

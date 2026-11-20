@@ -22,9 +22,10 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
         "retn0-srv-oci-02",
     }
     assert hosts["retn0-srv-main"]["stacks"] == {}
-    assert hosts["retn0-srv-gcp-01"]["stacks"]["beszel-agent"] == (
-        {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
-    )
+    assert set(select_stacks(hosts["retn0-srv-gcp-01"]["stacks"], None)) == {
+        "caddy-gcp",
+        "beszel-hub",
+    }
     assert hosts["retn0-srv-gcp-01"]["stacks"]["caddy-gcp"] == {
         "env": {
             "CADDY_DOMAIN": "beszel.retn0.dev",
@@ -33,9 +34,7 @@ def test_host_definitions_are_the_stack_placement_source() -> None:
         }
     }
     for name in ("retn0-srv-oci-01", "retn0-srv-oci-02"):
-        assert select_stacks(hosts[name]["stacks"], None) == {
-            "beszel-agent": {"env": {"BESZEL_HUB_URL": "https://beszel.retn0.dev"}}
-        }
+        assert select_stacks(hosts[name]["stacks"], None) == {}
     for config in hosts.values():
         for stack in config["stacks"]:
             assert (REPO_ROOT / "compose" / stack / "compose.yaml").is_file()

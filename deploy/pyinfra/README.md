@@ -84,7 +84,7 @@ For the GCP resolver policy, use the dedicated [DNS migration and verification p
 
 ### Compose stacks
 
-Preview a stack deployment for one cloud host, then apply it only after checking that host's existing `.env`, data directory, and Beszel identity:
+Preview a stack deployment for one cloud host, then check its configuration and persistent data before applying it.
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \
@@ -103,7 +103,7 @@ An explicit `--data stack_env_file=/absolute/path/to/private.env` can seed an ab
 
 See [`compose/caddy-gcp/README.md`](../../compose/caddy-gcp/README.md) and [`compose/beszel-hub/README.md`](../../compose/beszel-hub/README.md) for the GCP HTTPS entrypoint, Hub deployment, and validation commands. Deploy `caddy-gcp` before `beszel-hub` so their shared Docker network exists.
 
-The GCP and both OCI Beszel agents have been applied and verified. Each host retains its original secret-bearing Compose file as `/opt/stacks/beszel-agent/compose.pre-iac.yaml` with mode `600` for rollback; the OCI hosts also retain `.env.pre-iac`. Do not copy these files into Git. Each agent's identity remains in `/opt/stacks/beszel-agent/data/`.
+Use [Komodo to deploy the Beszel agents](../../compose/beszel-agent/README.md). The previous project files and agent data under `/opt/stacks/beszel-agent` provide the source for the migration and rollback.
 
 `baseline.py` does not perform a whole-system package upgrade or reboot a
 host. Run it twice after a change; the second run should report zero changed

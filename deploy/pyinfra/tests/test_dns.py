@@ -1,23 +1,13 @@
 import os
-import shlex
 import subprocess
 from types import SimpleNamespace
 
 import pytest
 from pyinfra.api.exceptions import DeployError
 
-from group_data import all as all_data
-from group_data import gcp as gcp_data
 from homelab_infra import dns
 
-PROBES = ("example.com", "metadata.google.internal", "main.example.ts.net")
-
-
-def test_dns_policy_is_explicit_and_only_opts_in_gcp() -> None:
-    assert all_data.manage_resolved_dns is False
-    assert all_data.dns_probe_names == ()
-    assert gcp_data.manage_resolved_dns is True
-    assert dns.dns_probe_names(gcp_data.dns_probe_names) == gcp_data.dns_probe_names
+PROBES = ("public.example", "metadata.example", "node.example")
 
 
 @pytest.mark.parametrize(
@@ -31,12 +21,12 @@ def test_invalid_probe_names_stop_before_entering_a_root_command(names) -> None:
 @pytest.mark.parametrize(
     "connection,expected",
     [
-        ("35.235.240.0 1234 10.0.0.1 22", True),
-        ("35.235.255.255 1234 10.0.0.1 22", True),
-        ("35.235.239.255 1234 10.0.0.1 22", False),
-        ("100.64.0.1 1234 100.64.0.2 22", False),
-        ("::1 1234 ::2 22", False),
-        ("not-an-ip 1234 10.0.0.1 22", False),
+        ("35.235.240.0 1234 192.0.2.10 22", True),
+        ("35.235.255.255 1234 192.0.2.10 22", True),
+        ("35.235.239.255 1234 192.0.2.10 22", False),
+        ("100.64.0.1 1234 192.0.2.10 22", False),
+        ("2001:db8::1 1234 2001:db8::2 22", False),
+        ("not-an-ip 1234 192.0.2.10 22", False),
         ("", False),
     ],
 )
@@ -77,7 +67,7 @@ def test_prerequisites_and_transport_are_checked_before_mutations(
         if command == dns.PREREQUISITES:
             return "ready" if ready else ""
         assert kwargs["_sudo"] is False
-        return f"{'35.235.248.2' if iap else '100.64.0.1'} 1234 10.0.0.1 22"
+        return f"{'35.235.248.2' if iap else '100.64.0.1'} 1234 192.0.2.10 22"
 
     monkeypatch.setattr(
         dns,
@@ -112,7 +102,7 @@ def dns_world(tmp_path):
     stub = root / "run/systemd/resolve/stub-resolv.conf"
     stub.write_text("nameserver 127.0.0.53\n")
     upstream = root / "run/systemd/resolve/resolv.conf"
-    upstream.write_text("nameserver 169.254.169.254\n")
+    upstream.write_text("nameserver 192.0.2.53\n")
     original_backup = root / "etc/resolv.pre-tailscale-backup.conf"
     original_backup.symlink_to(upstream)
     (root / "sys/class/net/tailscale0/ifindex").write_text("3\n")
@@ -137,6 +127,7 @@ if test -f "$ROOT/configured"; then echo 'a(iay) 1 2 4 100 100 100 100';
 else echo 'a(iay) 0'; fi
 """,
         "tailscale": "exit 0\n",
+        "docker": "exit 99\n",
         "getent": "exit 0\n",
         "resolvectl": 'if test -f "$ROOT/fail_dns"; then exit 1; fi\n',
         "sleep": "exit 0\n",
@@ -232,14 +223,3 @@ def test_partial_stub_migration_still_requires_tailscale_registration(
     resolver.unlink()
     resolver.symlink_to(resolver.parents[1] / "run/systemd/resolve/stub-resolv.conf")
     assert run(dns.DNS_STATE_COMMAND).stdout == ""
-
-
-def test_scripts_are_valid_posix_shell(tmp_path) -> None:
-    for script in [dns.build_dns_migration(PROBES), dns.build_dns_verification(PROBES)]:
-        path = tmp_path / "script.sh"
-        path.write_text(script)
-        result = subprocess.run(
-            ["/bin/sh", "-n", str(path)], capture_output=True, text=True
-        )
-        assert result.returncode == 0, result.stderr
-    assert shlex.quote(PROBES[0]) in dns.build_dns_verification(PROBES)

@@ -16,6 +16,7 @@ The Beszel agents on the GCP and two OCI hosts use the new deployment flow. Exis
   - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
   - [Infrastructure Automation](#infrastructure-automation)
+  - [Testing](#testing)
   - [Quick Start](#quick-start)
   - [Services](#services)
     - [Maintained Services](#maintained-services)
@@ -44,6 +45,19 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 The [`deploy/pyinfra/`](deploy/pyinfra/) executor manages the GCP and OCI Linux baseline over Tailscale SSH and can explicitly apply stacks assigned in `hosts/`. It covers host auditing, base packages, a disk-backed swap file, Docker Engine, and requested package maintenance. A Git push never deploys by itself.
 
 pyinfra runs from `retn0-srv-main`. See [`deploy/pyinfra/README.md`](deploy/pyinfra/README.md) for setup, validation, and operation instructions.
+
+## Testing
+
+- **Compose**. Run `pnpm install --frozen-lockfile` and `pnpm lint` from the repository root.
+- **pyinfra**. Follow the [pyinfra setup and validation commands](deploy/pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
+- **RisuAI**. Check out the upstream revision pinned in the [Dockerfile](risuai/Dockerfile) and apply the repository's [patch series](risuai/patches/series) with [`apply-patches.sh`](risuai/patches/apply-patches.sh). Run the regression test against the patched checkout. It was verified with Node.js 24.
+
+```bash
+homelab_repo="$PWD"
+risuai_source=/path/to/risuai-checkout
+(cd "$risuai_source" && PATCH_DIR="$homelab_repo/risuai/patches" sh "$homelab_repo/risuai/patches/apply-patches.sh")
+RISUAI_SOURCE_DIR="$risuai_source" node --test --test-timeout=3000 risuai/tests/mobile-background-stream.test.mjs
+```
 
 ## Quick Start
 

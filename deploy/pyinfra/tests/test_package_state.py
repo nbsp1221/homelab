@@ -4,7 +4,7 @@ from homelab_infra.package_state import command_lines, packages_to_upgrade
 def test_empty_command_fact_has_no_lines() -> None:
     assert command_lines(None) == ()
     assert command_lines("") == ()
-    assert command_lines("/swapfile\n") == ("/swapfile",)
+    assert command_lines("example-item\n") == ("example-item",)
 
 
 def test_only_upgradeable_managed_packages_are_selected() -> None:

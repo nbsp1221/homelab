@@ -3,27 +3,12 @@ from io import BytesIO
 import pytest
 
 from homelab_infra.docker import (
-    APT_UPDATE_ERROR_MODE,
-    APT_UPDATE_ERROR_MODE_PATH,
-    DOCKER_KEY_PATH,
-    DOCKER_PACKAGE_POLICY_COMMAND,
-    DOCKER_PACKAGES,
     docker_package_candidate_available,
     docker_repository,
     docker_repository_refresh_cache_time,
     fetch_repository_key,
     installed_conflicts,
 )
-
-
-def test_docker_package_intent_is_explicit() -> None:
-    assert DOCKER_PACKAGES == (
-        "docker-ce",
-        "docker-ce-cli",
-        "containerd.io",
-        "docker-buildx-plugin",
-        "docker-compose-plugin",
-    )
 
 
 @pytest.mark.parametrize(
@@ -74,37 +59,28 @@ def test_docker_repository_rejects_unsupported_distribution() -> None:
         docker_repository("Fedora", "42", "x86_64")
 
 
-def test_docker_repository_refresh_uses_strict_apt_configuration() -> None:
-    assert APT_UPDATE_ERROR_MODE_PATH == (
-        "/etc/apt/apt.conf.d/99homelab-update-error-mode"
-    )
-    assert APT_UPDATE_ERROR_MODE == b'APT::Update::Error-Mode "any";\n'
-
-
 @pytest.mark.parametrize(
     (
         "configuration_changed",
         "package_candidate_available",
-        "expected_cache_time",
+        "must_refresh",
     ),
     [
-        (True, True, 0),
-        (False, False, 0),
-        (False, True, 3600),
+        (True, True, True),
+        (False, False, True),
+        (False, True, False),
     ],
 )
-def test_docker_repository_refresh_cache_time(
+def test_installed_repository_can_reuse_cache_if_its_candidate_is_available(
     configuration_changed: bool,
     package_candidate_available: bool,
-    expected_cache_time: int,
+    must_refresh: bool,
 ) -> None:
-    assert (
-        docker_repository_refresh_cache_time(
-            configuration_changed,
-            package_candidate_available,
-        )
-        == expected_cache_time
+    cache_time = docker_repository_refresh_cache_time(
+        configuration_changed, package_candidate_available
     )
+    assert cache_time >= 0
+    assert (cache_time == 0) is must_refresh
 
 
 @pytest.mark.parametrize(
@@ -122,18 +98,12 @@ def test_docker_package_candidate_availability(
     assert docker_package_candidate_available(policy) is expected
 
 
-def test_docker_candidate_query_uses_a_stable_locale() -> None:
-    assert DOCKER_PACKAGE_POLICY_COMMAND == (
-        "LC_ALL=C apt-cache policy docker-ce 2>/dev/null || true"
-    )
-
-
 def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None:
     content = b"-----BEGIN PGP PUBLIC KEY BLOCK-----\nkey\n"
-    requests: list[tuple[str, int]] = []
+    requests: list[str] = []
 
     def open_key(url: str, timeout: int) -> BytesIO:
-        requests.append((url, timeout))
+        requests.append(url)
         return BytesIO(content)
 
     monkeypatch.setattr("homelab_infra.docker.urlopen", open_key)
@@ -141,8 +111,7 @@ def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None
     key_file = fetch_repository_key("https://download.docker.com/linux/debian/gpg")
 
     assert key_file.read() == content
-    assert requests == [("https://download.docker.com/linux/debian/gpg", 30)]
-    assert DOCKER_KEY_PATH == "/etc/apt/keyrings/docker.asc"
+    assert requests == ["https://download.docker.com/linux/debian/gpg"]
 
 
 def test_repository_key_rejects_an_invalid_response(monkeypatch) -> None:

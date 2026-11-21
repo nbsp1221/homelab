@@ -1,10 +1,10 @@
 # GCP HTTPS entrypoint
 
-This project serves `https://beszel.retn0.dev` on `retn0-srv-gcp-01` over Tailscale. Caddy proxies requests to the separate `beszel-hub` stack and returns `gcp-caddy-ok` at `/healthz` for checking the proxy itself.
+This stack provides an HTTPS reverse proxy for [Beszel Hub](../beszel-hub/README.md) over Tailscale. Caddy returns `gcp-caddy-ok` at `/healthz` so the proxy can be checked independently of the Hub.
 
 ## Configuration and state
 
-`hosts/retn0-srv-gcp-01/host.yaml` declares the domain and Tailscale IPv4/IPv6 listeners. Only TCP 443 is published, bound to those addresses. Caddy handles certificates automatically through Cloudflare DNS-01. The host-local `/opt/stacks/caddy-gcp/.env` contains `CLOUDFLARE_API_TOKEN` with Zone:Read and DNS:Edit permissions for the relevant zone. Keep credentials outside Git.
+The target host definition supplies `CADDY_DOMAIN` and the host's Tailscale IPv4 and IPv6 addresses through `CADDY_BIND_IPV4` and `CADDY_BIND_IPV6`. Only TCP 443 is published, bound to those addresses. Caddy obtains certificates via Cloudflare DNS-01. Set `CLOUDFLARE_API_TOKEN` in the deployed stack's local `.env` with Zone:Read and DNS:Edit permissions for the relevant zone. Keep the token outside Git.
 
 The project uses the [Cloudflare module maintainers' prebuilt image](https://github.com/caddy-dns/cloudflare/pkgs/container/cloudflare), `ghcr.io/caddy-dns/cloudflare:v0.2.4`, pinned by digest. This image contains Caddy `2.11.2`; the tag refers to the Cloudflare module version. Deployments pull the image without compiling Caddy.
 
@@ -14,30 +14,28 @@ Named volumes preserve certificate and ACME state under `/data` and Caddy runtim
 
 Run from `deploy/pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file.
 
-Preview and apply the Caddy stack:
+Preview and apply the Caddy stack. Replace `gcp-01` with your host's inventory name.
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \
-  --limit retn0-srv-gcp-01 --data stack=caddy-gcp --dry --serial
+  --limit gcp-01 --data stack=caddy-gcp --dry --serial
 uv run pyinfra inventories/production.py deploys/stacks.py \
-  --limit retn0-srv-gcp-01 --data stack=caddy-gcp --serial --yes
+  --limit gcp-01 --data stack=caddy-gcp --serial --yes
 ```
 
-Deploy `caddy-gcp` before [`beszel-hub`](../beszel-hub/README.md) so their shared Docker network exists. The executor explicitly uploads only `compose.yaml` and `config/Caddyfile`, validates the staged Compose and Caddy configurations, promotes the public configuration files, and applies the Compose project while preserving its volumes. It then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose) to apply the Caddyfile. Identical configurations do not force a reload or container recreation; Compose still recreates the container when its service definition or image changes. The existing Beszel agent is excluded by the stack selector.
-
-The reload operation uses pyinfra's built-in retries, with up to three retries two seconds apart, because Compose may return before a newly started container's admin API is ready.
+Deploy `caddy-gcp` before [`beszel-hub`](../beszel-hub/README.md) so their shared Docker network exists. The executor validates the staged Compose and Caddy files, applies the project while preserving its volumes, then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose).
 
 ## Verify
 
-From a Tailscale-connected client, check both address families with certificate validation enabled:
+From a Tailscale-connected client, check both address families with certificate validation enabled. Replace `beszel.example.com` with your domain.
 
 ```bash
-curl --noproxy '*' -4 --fail https://beszel.retn0.dev/api/health
-curl --noproxy '*' -6 --fail https://beszel.retn0.dev/api/health
-curl --noproxy '*' --fail https://beszel.retn0.dev/healthz
+curl --noproxy '*' -4 --fail https://beszel.example.com/api/health
+curl --noproxy '*' -6 --fail https://beszel.example.com/api/health
+curl --noproxy '*' --fail https://beszel.example.com/healthz
 ```
 
-The Hub health endpoint must return HTTP 200, and `/healthz` must return `gcp-caddy-ok`. Open the root URL to reach the Beszel UI. This Hub uses a separate database and receives metrics from the main-host, GCP, and both OCI agents, each registered with its own token. The old main-host Hub and its data have been removed; the separate desktop will be registered later.
+The Hub health endpoint must return HTTP 200, and `/healthz` must return `gcp-caddy-ok`. Open the root URL to reach the Beszel UI.
 
 ## Local checks
 

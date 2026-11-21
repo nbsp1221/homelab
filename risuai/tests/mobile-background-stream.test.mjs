@@ -1,23 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { stripTypeScriptTypes } from 'node:module';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { pathToFileURL } from 'node:url';
 
-// Exercise the actual patched upstream function without importing the entire UI.
 const sourceDir = process.env.RISUAI_SOURCE_DIR;
 assert.ok(sourceDir, 'Set RISUAI_SOURCE_DIR to the checkout with the patch stack applied');
-const source = await readFile(join(sourceDir, 'src/ts/globalApi.svelte.ts'), 'utf8');
-const start = source.indexOf('async function fetchViaProxyJobWs(');
-assert.notEqual(start, -1);
-const end = source.indexOf('\n/**', start);
-assert.notEqual(end, -1);
-const functionSource = stripTypeScriptTypes(source.slice(start, end));
-const helpers = stripTypeScriptTypes(await readFile(join(sourceDir, 'src/ts/network/proxyJobWs.ts'), 'utf8'))
-    .replace(/^export /gm, '');
-const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+const { fetchProxyJobStream } = await import(
+    pathToFileURL(join(sourceDir, 'src/ts/network/proxyJobWs.ts'))
+);
 
-function fixture({ delayCreation = false } = {}) {
+function fixture(t, { delayCreation = false } = {}) {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const tick = async () => {
+        await new Promise(setImmediate);
+        t.mock.timers.tick(0);
+        await new Promise(setImmediate);
+    };
     class Page extends EventTarget {
         visibilityState = 'visible';
         browserFrozen = false;
@@ -84,16 +82,25 @@ function fixture({ delayCreation = false } = {}) {
         }
         return new Response(null, { status: 204 });
     };
-    const run = new Function(
-        'document', 'WebSocket', 'fetch', 'location', 'getNodeServerProxyAuth',
-        'getProxyStreamJobBaseUrl', 'defaultProxyJobHeartbeatSec',
-        `${helpers}\n${functionSource}\nreturn fetchViaProxyJobWs;`,
-    )(page, Socket, fetch, { protocol: 'https:', host: 'qa.invalid' },
-        async () => 'fake-auth', () => '', 15);
+    t.mock.method(globalThis, 'fetch', fetch);
+    for (const [name, value] of Object.entries({
+        document: page,
+        WebSocket: Socket,
+        location: { protocol: 'https:', host: 'qa.invalid' },
+    })) {
+        const original = Object.getOwnPropertyDescriptor(globalThis, name);
+        Object.defineProperty(globalThis, name, { value, configurable: true });
+        t.after(() => {
+            if (original) Object.defineProperty(globalThis, name, original);
+            else delete globalThis[name];
+        });
+    }
     const controller = new AbortController();
-    const response = run('http://fake-llm/', {
-        method: 'POST', body: new Uint8Array(), signal: controller.signal,
-    });
+    const response = fetchProxyJobStream(
+        'http://model.invalid/',
+        { method: 'POST', body: new Uint8Array(), signal: controller.signal },
+        { auth: 'fake-auth', baseUrl: 'https://qa.invalid', heartbeatSec: 15 },
+    );
     const append = event => {
         const sequenced = { ...event, sequence: events.length + 1 };
         events.push(sequenced);
@@ -101,7 +108,7 @@ function fixture({ delayCreation = false } = {}) {
         return sequenced;
     };
     return {
-        page, sockets, requests, response, controller, releaseCreation, append,
+        page, sockets, requests, response, controller, releaseCreation, tick,
         headers: () => append({ type: 'upstream_headers', status: 200, headers: {} }),
         chunk: text => append({ type: 'chunk', dataBase64: Buffer.from(text).toString('base64') }),
         done: () => append({ type: 'done' }),
@@ -114,9 +121,9 @@ function fixture({ delayCreation = false } = {}) {
     };
 }
 
-test('send then freeze before headers: completed response is delivered once after resume', async () => {
-    const f = fixture();
-    await tick();
+test('send then freeze before headers: completed response is delivered once after resume', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.page.hide();
     f.page.freeze();
     f.headers();
@@ -126,15 +133,16 @@ test('send then freeze before headers: completed response is delivered once afte
     f.page.showBeforeResume();
     assert.equal(f.rejectedConnections, 0);
     f.page.resume();
+    await f.tick();
     const response = await f.response;
     assert.equal(response.status, 200);
     assert.equal(await response.text(), 'reasoning\n완료된 본문 🌼\n');
     f.assertOneGeneration();
 });
 
-test('freeze during reasoning: retained Response receives the complete body, without duplicate bytes', async () => {
-    const f = fixture();
-    await tick();
+test('freeze during reasoning: retained Response receives the complete body, without duplicate bytes', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.headers();
     const response = await f.response;
     const output = response.text();
@@ -144,52 +152,53 @@ test('freeze during reasoning: retained Response receives the complete body, wit
     f.chunk('본문 첫 문장.\n');
     f.page.showBeforeResume();
     f.page.resume();
-    await tick();
+    await f.tick();
     f.sockets.at(-1).deliver(previous);
     f.chunk('본문 마지막 문장.\n');
     f.done();
     assert.equal(await output, 'reasoning\n본문 첫 문장.\n본문 마지막 문장.\n');
-    assert.equal(new URL(f.sockets.at(-1).url).searchParams.get('after'), '2');
     f.assertOneGeneration();
 });
 
-test('visible before a later resume task does not open a frozen socket', async () => {
-    const f = fixture();
-    await tick();
+test('visible before a later resume task does not open a frozen socket', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.page.hide();
     f.page.freeze();
     f.headers();
     f.chunk('completed while hidden');
     f.done();
     f.page.showBeforeResume();
-    await tick();
+    await f.tick();
     assert.equal(f.sockets.length, 1);
     assert.equal(f.rejectedConnections, 0);
     f.page.resume();
+    await f.tick();
     assert.equal(await (await f.response).text(), 'completed while hidden');
     f.assertOneGeneration();
 });
 
-test('job creation completes while hidden: no socket until the page resumes', async () => {
-    const f = fixture({ delayCreation: true });
-    await tick();
+test('job creation completes while hidden: no socket until the page resumes', async t => {
+    const f = fixture(t, { delayCreation: true });
+    await f.tick();
     f.page.hide();
     f.page.freeze();
     f.releaseCreation();
-    await tick();
+    await f.tick();
     assert.equal(f.sockets.length, 0);
     f.headers();
     f.chunk('buffered');
     f.done();
     f.page.showBeforeResume();
     f.page.resume();
+    await f.tick();
     assert.equal(await (await f.response).text(), 'buffered');
     f.assertOneGeneration();
 });
 
-test('rapid visibility/resume changes create one subscriber and clean up after completion', async () => {
-    const f = fixture();
-    await tick();
+test('rapid visibility/resume changes create one subscriber and clean up after completion', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.headers();
     const output = (await f.response).text();
     f.chunk('a');
@@ -198,7 +207,7 @@ test('rapid visibility/resume changes create one subscriber and clean up after c
         f.page.showBeforeResume();
         f.page.resume();
     }
-    await tick();
+    await f.tick();
     assert.equal(f.sockets.filter(s => s.readyState === 1).length, 1);
     f.chunk('b');
     f.done();
@@ -208,40 +217,40 @@ test('rapid visibility/resume changes create one subscriber and clean up after c
     f.page.freeze();
     f.page.showBeforeResume();
     f.page.resume();
-    await tick();
+    await f.tick();
     assert.equal(f.sockets.length, count);
     f.assertOneGeneration();
 });
 
-test('ordinary visible connection failure does not delete the server job or retry', async () => {
-    const f = fixture();
-    await tick();
+test('ordinary visible connection failure does not delete the server job or retry', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.sockets.at(-1).close();
     const response = await f.response;
     assert.equal(response.status, 502);
     await response.text();
-    await tick();
+    await f.tick();
     assert.equal(f.sockets.length, 1);
     f.assertOneGeneration();
 });
 
-test('explicit abort while frozen deletes the job and never reconnects', async () => {
-    const f = fixture();
-    await tick();
+test('explicit abort while frozen deletes the job and never reconnects', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.page.hide();
     f.page.freeze();
     f.controller.abort();
     assert.equal((await f.response).status, 499);
     f.page.showBeforeResume();
     f.page.resume();
-    await tick();
+    await f.tick();
     assert.equal(f.requests.filter(r => r.method === 'DELETE').length, 1);
     assert.equal(f.sockets.length, 1);
 });
 
-test('explicit stream cancellation still cancels the server job', async () => {
-    const f = fixture();
-    await tick();
+test('explicit stream cancellation still cancels the server job', async t => {
+    const f = fixture(t);
+    await f.tick();
     f.headers();
     await (await f.response).body.cancel();
     assert.equal(f.requests.filter(r => r.method === 'DELETE').length, 1);

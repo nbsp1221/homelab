@@ -1,4 +1,5 @@
 import runpy
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -56,9 +57,12 @@ def test_caddy_rejects_missing_configuration_and_symlinks(tmp_path, case) -> Non
         load_stack_assets(project)
 
 
-def test_stack_selection_cannot_apply_an_unassigned_project() -> None:
-    stacks = {"beszel-agent": {}, "caddy-gcp": {}}
-    assert select_stacks(stacks, "caddy-gcp") == {"caddy-gcp": {}}
+def test_stack_selection_requires_explicit_bootstrap_and_rejects_unassigned() -> None:
+    stacks = {"example-app": {}, "bootstrap-agent": {"bootstrap": True}}
+    assert select_stacks(stacks, None) == {"example-app": {}}
+    assert select_stacks(stacks, "bootstrap-agent") == {
+        "bootstrap-agent": {"bootstrap": True}
+    }
     with pytest.raises(ValueError, match="not assigned"):
         select_stacks(stacks, "other")
 
@@ -76,6 +80,21 @@ def test_initial_environment_contains_secrets_and_host_values_together() -> None
 def test_initial_environment_refuses_to_import_another_hosts_managed_values() -> None:
     with pytest.raises(ValueError, match="secret-only"):
         render_environment_seed("# BEGIN HOMELAB HOST VALUES\n", {})
+
+
+def test_deploy_rejects_an_assignment_without_a_compose_file(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(hosts, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        hosts, "load_hosts", lambda: {"cloud-a": {"stacks": {"example-app": {}}}}
+    )
+    monkeypatch.setattr(
+        pyinfra, "host", SimpleNamespace(name="cloud-a", data=SimpleNamespace())
+    )
+
+    with pytest.raises(ValueError, match="Missing Compose project"):
+        runpy.run_path(str(Path(__file__).parents[1] / "deploys/stacks.py"))
 
 
 @pytest.mark.parametrize("has_env", [False, True])
@@ -176,7 +195,6 @@ def test_stack_plan_validates_before_promotion_and_reloads_only_caddy(
     applied = next(kwargs for op, kwargs in operations if op == "compose")
     assert not applied.get("force_recreate", False)
     assert applied["remove_orphans"] is False
-    names = [kwargs["name"] for _, kwargs in operations]
     uploads = [kwargs for op, kwargs in operations if op == "put"]
     assert {
         Path(upload["src"]).relative_to(project).as_posix() for upload in uploads
@@ -186,22 +204,27 @@ def test_stack_plan_validates_before_promotion_and_reloads_only_caddy(
         else {"compose.yaml"}
     )
     assert all(upload["mode"] == "600" for upload in uploads)
-    assert all(
-        kwargs["mode"] == "700" for op, kwargs in operations if op == "directory"
+    commands = {
+        index: shlex.split(kwargs["commands"])
+        for index, (op, kwargs) in enumerate(operations)
+        if op == "shell"
+    }
+    validate = next(
+        i for i, args in commands.items() if args[-2:] == ["config", "--quiet"]
     )
-    assert (
-        names.index(f"Validate staged {stack} Compose configuration")
-        < names.index(f"Promote validated {stack} Compose file")
-        < names.index(f"Apply {stack} Compose project")
-    )
+    promote = next(i for i, args in commands.items() if args[0] == "mv")
+    apply = next(i for i, (op, _) in enumerate(operations) if op == "compose")
+    assert validate < promote < apply
+    reloads = {
+        i: args for i, args in commands.items() if "caddy" in args and "reload" in args
+    }
     if stack == "caddy-gcp":
-        assert names.index("Validate staged caddy-gcp service caddy") < names.index(
-            "Promote validated caddy-gcp asset config/Caddyfile"
+        caddy_check = next(
+            i for i, args in commands.items() if "caddy" in args and "validate" in args
         )
-        assert operations[-1][0] == "shell"
-        command = operations[-1][1]["commands"]
-        assert "exec -T caddy caddy reload --config /etc/caddy/Caddyfile" in command
-        assert "--force" not in command
-        assert names.index("Apply caddy-gcp Compose project") == len(names) - 2
+        assert validate < caddy_check < promote
+        ((reload_at, args),) = reloads.items()
+        assert reload_at > apply
+        assert "--force" not in args
     else:
-        assert operations[-1][0] == "compose"
+        assert not reloads

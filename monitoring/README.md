@@ -109,7 +109,7 @@ Provisioned at startup from `grafana/dashboards/`:
 - `node-exporter-full.json`
 - `cadvisor-dashboard.json`
 - `nvidia-dcgm-exporter-dashboard.json`
-- `retn0-smartctl-exporter-dashboard.json`
+- SMART disk health dashboard
 - `blackbox-exporter-http-prober-dashboard.json`
 
 Home dashboard path is controlled by `GRAFANA_HOME_DASHBOARD_PATH` in `.env`.

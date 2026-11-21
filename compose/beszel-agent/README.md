@@ -1,24 +1,20 @@
-# Beszel cloud agent
+# Beszel Agent
 
-This Compose project runs an outbound-only Beszel agent on the GCP and OCI hosts. The agents report to the [GCP Hub](../beszel-hub/README.md). The main host uses the [NVIDIA agent definition](../beszel-agent-nvidia/README.md).
+This Compose project runs an outbound-only agent that reports host and Docker metrics to a [Beszel Hub](../beszel-hub/README.md). For NVIDIA GPU metrics, see the [NVIDIA agent](../beszel-agent-nvidia/README.md).
 
 The agent uses host networking for host interface metrics. `DISABLE_SSH=true` turns off its inbound SSH listener, and `BESZEL_HUB_URL` selects the Hub for its outbound WebSocket connection.
 
-Docker container monitoring keeps the cloud hosts' existing direct `/var/run/docker.sock:ro` mount. This is the smallest change that preserves its current metrics and avoids adding a proxy service. The `:ro` mount protects the socket path from filesystem writes, but it does not restrict Docker API requests; access to the Docker daemon remains highly privileged. If that risk becomes unacceptable, use a restricted socket proxy like the main host rather than assuming `:ro` makes the API read-only.
+Container monitoring uses a direct Docker socket mount. The `:ro` mount protects the socket path from filesystem writes. Docker API access still carries the Docker daemon's privileges.
 
 ## Komodo
 
-Create a Stack named `beszel-agent-<server>` on each target server. Use the `homelab` Repo, `compose/beszel-agent` as the run directory, and `beszel-agent` as the Project Name. Set `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. Agents that report to the same Hub use the same URL and Hub public key.
+Select the target server and the Repo containing this definition. For a server named `host-01`, use the Stack name `beszel-agent-host-01` and the run directory `compose/beszel-agent`. Set Project Name to `beszel-agent` to match the Compose project and supply `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. Agents that report to the same Hub use the same URL and Hub public key.
 
-Store each system's token as a single line in `/etc/komodo/secrets/beszel-agent.token` on its server with mode `600`. Compose mounts this file and the agent reads it through `TOKEN_FILE`. The same path works for manual Compose deployments with the remaining variables in a local `.env` beside the Compose file.
+Register the host with **Add System** in Beszel. On the target host, store its token as one line in the file identified by `secrets.beszel_agent_token.file` in [`compose.yaml`](compose.yaml). Use mode `600` and keep the file outside Git. The agent reads the mounted secret through `TOKEN_FILE`. For manual deployment, set the remaining variables in a local `.env` beside the Compose file and run `docker compose up -d`.
 
-## Migration
+## Verify
 
-For each existing agent, keep its current system registration, token, and data. Prepare that token in the file above and copy `/opt/stacks/beszel-agent/data/` into the `beszel-agent_beszel-agent-data` Docker volume, including the fingerprint. Keep the old Compose project files and data on the host for rollback.
-
-After preparing the token and volume, take down the old project using its Compose file and deploy the Stack in Komodo. Verify that the new agent is healthy and the existing system in the Hub receives fresh host and Docker metrics.
-
-For a new host, register it through **Add System** in the Hub and use the token issued for that system.
+Check that the Hub receives fresh host and Docker metrics. Keep the `beszel-agent-data` named volume and its associated system registration across deployments.
 
 ## Local validation
 

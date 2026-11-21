@@ -1,87 +1,65 @@
+import runpy
+from pathlib import Path
+
 import pytest
 
-from group_data import all as all_data
-from group_data import gcp as gcp_data
-from group_data import oci as oci_data
-from homelab_infra.hosts import REPO_ROOT, load_hosts
-from homelab_infra.stacks import select_stacks
-from inventories.production import gcp, oci
+from homelab_infra import hosts
 
 
-def test_production_inventory_contains_the_three_tailscale_hosts() -> None:
-    assert gcp == ["retn0-srv-gcp-01"]
-    assert oci == ["retn0-srv-oci-01", "retn0-srv-oci-02"]
+def write_host(root: Path, name: str, contents: str) -> None:
+    host_dir = root / name
+    host_dir.mkdir()
+    (host_dir / "host.yaml").write_text(contents)
 
 
-def test_host_definitions_are_the_stack_placement_source() -> None:
-    hosts = load_hosts()
-    assert set(hosts) == {
-        "retn0-srv-main",
-        "retn0-srv-gcp-01",
-        "retn0-srv-oci-01",
-        "retn0-srv-oci-02",
-    }
-    assert hosts["retn0-srv-main"]["stacks"] == {}
-    assert set(select_stacks(hosts["retn0-srv-gcp-01"]["stacks"], None)) == {
-        "caddy-gcp",
-        "beszel-hub",
-    }
-    assert hosts["retn0-srv-gcp-01"]["stacks"]["caddy-gcp"] == {
-        "env": {
-            "CADDY_DOMAIN": "beszel.retn0.dev",
-            "CADDY_BIND_IPV4": "100.82.114.104",
-            "CADDY_BIND_IPV6": "fd7a:115c:a1e0::7536:7269",
-        }
-    }
-    for name in ("retn0-srv-oci-01", "retn0-srv-oci-02"):
-        assert select_stacks(hosts[name]["stacks"], None) == {}
-    for config in hosts.values():
-        for stack in config["stacks"]:
-            assert (REPO_ROOT / "compose" / stack / "compose.yaml").is_file()
+def test_cloud_inventory_groups_hosts_by_provider(tmp_path, monkeypatch) -> None:
+    write_host(tmp_path, "cloud-a", "provider: gcp\nstacks: {}\n")
+    write_host(tmp_path, "cloud-b", "provider: oci\nstacks: {}\n")
+    write_host(tmp_path, "local-a", "provider: local\nstacks: {}\n")
+    definitions = hosts.load_hosts(tmp_path)
+    monkeypatch.setattr(hosts, "load_hosts", lambda: definitions)
+
+    inventory = runpy.run_path(
+        str(Path(__file__).parents[1] / "inventories/production.py")
+    )
+
+    assert inventory["gcp"] == ["cloud-a"]
+    assert inventory["oci"] == ["cloud-b"]
 
 
-@pytest.mark.parametrize("name", [*gcp, *oci])
-def test_cloud_inventory_assigns_periphery_as_an_explicit_bootstrap(name) -> None:
-    stacks = load_hosts()[name]["stacks"]
-    assert stacks["komodo-periphery"] == {
-        "bootstrap": True,
-        "env": {
-            "PERIPHERY_CORE_ADDRESS": "https://komodo.retn0.dev",
-            "PERIPHERY_CONNECT_AS": name,
+def test_host_definitions_preserve_stack_settings(tmp_path) -> None:
+    write_host(
+        tmp_path,
+        "cloud-a",
+        "provider: oci\nstacks:\n"
+        "  bootstrap-agent:\n    bootstrap: true\n"
+        "    env:\n      CONTROLLER_URL: https://controller.example\n"
+        "  example-app: {}\n",
+    )
+
+    assert hosts.load_hosts(tmp_path)["cloud-a"]["stacks"] == {
+        "bootstrap-agent": {
+            "bootstrap": True,
+            "env": {"CONTROLLER_URL": "https://controller.example"},
         },
+        "example-app": {},
     }
-    assert "komodo-periphery" not in select_stacks(stacks, None)
-    assert list(select_stacks(stacks, "komodo-periphery")) == ["komodo-periphery"]
 
 
 def test_host_definitions_reject_invalid_stack_paths(tmp_path) -> None:
-    host_dir = tmp_path / "example"
-    host_dir.mkdir()
-    (host_dir / "host.yaml").write_text(
-        "provider: gcp\nstacks:\n  ../other:\n    env: {}\n"
+    write_host(
+        tmp_path, "cloud-a", "provider: gcp\nstacks:\n  ../other:\n    env: {}\n"
     )
     with pytest.raises(ValueError, match="Invalid stack name"):
-        load_hosts(tmp_path)
+        hosts.load_hosts(tmp_path)
 
 
 def test_host_definitions_reject_invalid_environment_keys(tmp_path) -> None:
-    host_dir = tmp_path / "example"
-    host_dir.mkdir()
-    (host_dir / "host.yaml").write_text(
-        "provider: gcp\nstacks:\n  beszel-agent:\n"
-        "    env:\n      'BESZEL_HUB_URL=bad': https://beszel.retn0.dev\n"
+    write_host(
+        tmp_path,
+        "cloud-a",
+        "provider: gcp\nstacks:\n  example-app:\n"
+        "    env:\n      'ENDPOINT=bad': https://service.example\n",
     )
     with pytest.raises(ValueError, match="Invalid environment"):
-        load_hosts(tmp_path)
-
-
-def test_group_data_expresses_shared_and_provider_specific_intent() -> None:
-    assert all_data.ssh_key == "/home/retn0/.ssh/oci-main-bootstrap"
-    assert all_data._sudo is True
-    assert all_data.swap_path == "/swapfile"
-    assert all_data.swap_size_mb == 2048
-
-    assert gcp_data.ssh_user == "retn0"
-    assert gcp_data.docker_users == ("retn0",)
-    assert oci_data.ssh_user == "ubuntu"
-    assert oci_data.docker_users == ("ubuntu",)
+        hosts.load_hosts(tmp_path)

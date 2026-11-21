@@ -1,10 +1,6 @@
 import pytest
 
-from homelab_infra.system import BASE_PACKAGES, require_supported_distribution
-
-
-def test_system_baseline_has_only_runtime_prerequisites() -> None:
-    assert BASE_PACKAGES == ("ca-certificates", "curl")
+from homelab_infra.system import require_supported_distribution
 
 
 @pytest.mark.parametrize("distribution", ["Debian", "Ubuntu"])

@@ -2,13 +2,11 @@
 
 Personal homelab infrastructure and self-hosted services managed as code
 
-This repository contains small, mostly independent Docker Compose stacks. Existing services can still be started in their current directories. New multi-host deployments are being introduced one stack at a time through three separate responsibilities:
+This repository contains mostly independent Docker Compose stacks for self-hosted services and tools for configuring Linux hosts.
 
 - [`compose/`](compose/): the canonical Compose definition for each adopted stack.
 - [`hosts/`](hosts/): which host runs an adopted stack and its non-secret host-specific values.
 - [`deploy/`](deploy/): manually invoked executors that apply those definitions.
-
-The Beszel agents on the GCP and two OCI hosts use the new deployment flow. Existing main-host services have not been moved or redeployed.
 
 ## Table of Contents
 
@@ -16,6 +14,7 @@ The Beszel agents on the GCP and two OCI hosts use the new deployment flow. Exis
   - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
   - [Infrastructure Automation](#infrastructure-automation)
+  - [Testing](#testing)
   - [Quick Start](#quick-start)
   - [Services](#services)
     - [Maintained Services](#maintained-services)
@@ -41,9 +40,20 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 
 ## Infrastructure Automation
 
-The [`deploy/pyinfra/`](deploy/pyinfra/) executor manages the GCP and OCI Linux baseline over Tailscale SSH and can explicitly apply stacks assigned in `hosts/`. It covers host auditing, base packages, a disk-backed swap file, Docker Engine, and requested package maintenance. A Git push never deploys by itself.
+The [pyinfra executor](deploy/pyinfra/README.md) runs from a controller with SSH access to the managed hosts. It manages the GCP and OCI Linux baseline and can apply selected stacks assigned in [`hosts/`](hosts/). Run pyinfra explicitly when applying infrastructure changes.
 
-pyinfra runs from `retn0-srv-main`. See [`deploy/pyinfra/README.md`](deploy/pyinfra/README.md) for setup, validation, and operation instructions.
+## Testing
+
+- **Compose**. Run `pnpm install --frozen-lockfile` and `pnpm lint` from the repository root.
+- **pyinfra**. Follow the [pyinfra setup and validation commands](deploy/pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
+- **RisuAI**. Check out the upstream revision pinned in the [Dockerfile](risuai/Dockerfile) and apply the repository's [patch series](risuai/patches/series) with [`apply-patches.sh`](risuai/patches/apply-patches.sh). Run the regression test against the patched checkout. It was verified with Node.js 24.
+
+```bash
+homelab_repo="$PWD"
+risuai_source=/path/to/risuai-checkout
+(cd "$risuai_source" && PATCH_DIR="$homelab_repo/risuai/patches" sh "$homelab_repo/risuai/patches/apply-patches.sh")
+RISUAI_SOURCE_DIR="$risuai_source" node --test --test-timeout=3000 risuai/tests/mobile-background-stream.test.mjs
+```
 
 ## Quick Start
 
@@ -79,7 +89,7 @@ docker compose down
 | Infisical | [`infisical/`](infisical/) | Secrets management platform with Postgres and Redis. See `infisical/README.md`. |
 | Karakeep | [`karakeep/`](karakeep/) | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |
 | LiteLLM Proxy + Postgres | [`litellm/`](litellm/) | Standardized LLM proxy. See `litellm/README.md`. |
-| Bifrost AI Gateway | [`bifrost/`](bifrost/) | OpenAI-compatible AI gateway. See `bifrost/README.md`. |
+| Bifrost AI Gateway | [`compose/bifrost/`](compose/bifrost/) | OpenAI-compatible AI gateway. |
 | n8n | [`n8n/`](n8n/) | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `n8n/README.md`. |
 | OpenClaw Gateway + CLI | [`openclaw/`](openclaw/) | Agent gateway and CLI onboarding. See `openclaw/README.md` (then run `cd openclaw && python3 setup.py`). |
 | OpenCodex | [`compose/opencodex/`](compose/opencodex/) | Minimal remote OpenCodex proxy for Codex CLI, App, and IDE clients. See `compose/opencodex/README.md`. |

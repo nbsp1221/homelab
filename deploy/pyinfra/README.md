@@ -1,6 +1,6 @@
 # pyinfra
 
-This executor manages the baseline configuration and explicitly selected Compose stacks on the homelab's cloud Linux hosts. pyinfra runs from `retn0-srv-main` and connects to managed hosts over Tailscale SSH. Managed hosts do not run an agent or require Python.
+This executor manages the baseline configuration and explicitly selected Compose stacks on cloud Linux hosts. Run pyinfra from a controller with Tailscale SSH access to the targets. Managed hosts do not run an agent or require Python.
 
 ## Scope
 
@@ -17,7 +17,7 @@ Cloud resources, Tailscale enrollment, firewalls, and secret generation are outs
 
 ## Controller setup
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) on `retn0-srv-main`, then synchronize the locked Python 3.12 environment from the repository root:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) on the controller, then synchronize the locked Python 3.12 environment from the repository root:
 
 ```bash
 cd deploy/pyinfra
@@ -42,42 +42,42 @@ uv run pyinfra inventories/production.py debug-inventory
 
 ## Operation
 
-Inspect the resolved data for one provider or host:
+Replace `gcp-01` in the examples with your target's inventory name. Inspect the resolved data for one provider or host:
 
 ```bash
 uv run pyinfra inventories/production.py debug-inventory --limit gcp
 uv run pyinfra inventories/production.py debug-inventory \
-  --limit retn0-srv-gcp-01
+  --limit gcp-01
 ```
 
 Audit without changing host configuration:
 
 ```bash
 uv run pyinfra inventories/production.py deploys/audit.py \
-  --limit retn0-srv-gcp-01 --serial --yes
+  --limit gcp-01 --serial --yes
 ```
 
 Preview the baseline against one host:
 
 ```bash
 uv run pyinfra inventories/production.py deploys/baseline.py \
-  --limit retn0-srv-gcp-01 --dry --diff --serial
+  --limit gcp-01 --dry --diff --serial
 ```
 
 Apply and verify the baseline:
 
 ```bash
 uv run pyinfra inventories/production.py deploys/baseline.py \
-  --limit retn0-srv-gcp-01 --serial --yes
+  --limit gcp-01 --serial --yes
 uv run pyinfra inventories/production.py deploys/verify.py \
-  --limit retn0-srv-gcp-01 --serial --yes
+  --limit gcp-01 --serial --yes
 ```
 
 Apply explicit package maintenance:
 
 ```bash
 uv run pyinfra inventories/production.py deploys/maintenance.py \
-  --limit retn0-srv-gcp-01 --serial --yes
+  --limit gcp-01 --serial --yes
 ```
 
 For the GCP resolver policy, use the dedicated [DNS migration and verification procedure](DNS.md). It requires independent IAP access when changes are needed because Tailscale briefly stops. `deploys/dns.py` avoids Docker upgrades and application deployment; `deploys/verify_dns.py` checks both resolver paths and `deploys/verify_monitoring.py` checks TLS, the proxy and the Hub over both address families. After DNS is converged, an ordinary baseline run can use the existing Tailscale transport without another DNS migration.
@@ -88,12 +88,12 @@ Preview a stack deployment for one cloud host, then check its configuration and 
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \
-  --limit retn0-srv-gcp-01 --dry --diff --serial
+  --limit gcp-01 --dry --diff --serial
 uv run pyinfra inventories/production.py deploys/stacks.py \
-  --limit retn0-srv-gcp-01 --serial --yes
+  --limit gcp-01 --serial --yes
 ```
 
-Stacks use `/opt/stacks/<stack>` by default. A host stack with `bootstrap: true` uses `~/compose/<stack>` in the target SSH user's home and runs only when explicitly selected with `--data stack=<name>`. See [Komodo Periphery](../../compose/komodo-periphery/README.md) for the GCP and OCI onboarding commands.
+A host stack with `bootstrap: true` uses a directory in the target SSH user's home and runs only when explicitly selected with `--data stack=<name>`. See [Komodo Periphery](../../compose/komodo-periphery/README.md) for an onboarding example.
 
 The stack deploy synchronizes non-secret host values into a marked block of the target's `.env`, preserving its secret values and mode `600`. For stacks without an `.env.example` requiring host-local secrets, it can create this file from the declared non-secret values. It then uploads `compose/<stack>/compose.yaml` as `compose.pending.yaml` in the target project directory, validates that candidate, and only then replaces the active Compose file and calls `up`. When an `.env.example` exists, an absent `.env` stops before the active file is replaced unless explicit seeding is requested. Unlisted stacks are not stopped or deleted. Normal deployments neither upload nor replace target secrets or `data/`. Once applied, ordinary `docker compose` commands also work directly on the host.
 
@@ -101,9 +101,7 @@ Select one assigned stack with `--data stack=caddy-gcp` to avoid applying other 
 
 An explicit `--data stack_env_file=/absolute/path/to/private.env` can seed an absent target `.env` for the selected stack. The local file must have private permissions, and `--diff` is rejected for this operation. Secret values and host values are uploaded together because pyinfra plans file operations before execution. Existing remote environment files are preserved. Use this only for initial provisioning; subsequent deployments do not need the local credential file.
 
-See [`compose/caddy-gcp/README.md`](../../compose/caddy-gcp/README.md) and [`compose/beszel-hub/README.md`](../../compose/beszel-hub/README.md) for the GCP HTTPS entrypoint, Hub deployment, and validation commands. Deploy `caddy-gcp` before `beszel-hub` so their shared Docker network exists.
-
-Use [Komodo to deploy the Beszel agents](../../compose/beszel-agent/README.md). The previous project files and agent data under `/opt/stacks/beszel-agent` provide the source for the migration and rollback.
+See the [Caddy stack](../../compose/caddy-gcp/README.md) and [Beszel Hub stack](../../compose/beszel-hub/README.md) for configuration and validation. When using both, deploy `caddy-gcp` first so their shared Docker network exists.
 
 `baseline.py` does not perform a whole-system package upgrade or reboot a
 host. Run it twice after a change; the second run should report zero changed

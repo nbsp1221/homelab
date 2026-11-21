@@ -1,26 +1,26 @@
 # Komodo Periphery
 
-This stack connects each GCP and OCI Docker host to the existing Komodo Core. It uses the [official Periphery container setup](https://komo.do/docs/setup/connect-servers#container) with an outbound connection. It publishes no host ports.
+This stack connects a Docker host to Komodo Core with an outbound connection using the [official Periphery container setup](https://komo.do/docs/setup/connect-servers#container). It publishes no host ports.
 
-Run pyinfra from `deploy/pyinfra` on the controller after the target can be reached over Tailscale SSH and its Docker baseline is applied. Each `host.yaml` provides the Core URL and the name that appears in Komodo. pyinfra places `compose.yaml` and `.env` in `~/compose/komodo-periphery` on the target. Periphery stores deployment files under `/etc/komodo` and connection keys in the `komodo-periphery_keys` Docker volume.
+Run pyinfra from `deploy/pyinfra` after the controller can reach the target over SSH and the target has Docker and Compose. In the target's `host.yaml`, assign `komodo-periphery` with `bootstrap: true` and set `PERIPHERY_CORE_ADDRESS` and `PERIPHERY_CONNECT_AS` in its environment. For example, use `https://komodo.example.com` for Core and `host-01` for the server name.
 
 ## First deployment
 
-Preview GCP first. This also works before an onboarding key has been issued.
+Preview the target before issuing an onboarding key. Replace `host-01` in these commands with its inventory name.
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \
-  --limit retn0-srv-gcp-01 --data stack=komodo-periphery --dry --serial
+  --limit host-01 --data stack=komodo-periphery --dry --serial
 ```
 
 Create a server onboarding key in Komodo. On the controller, create a private file with mode `600` outside the repository containing one line, `PERIPHERY_ONBOARDING_KEY=<key>`. Pass its absolute path only when initially seeding the target `.env`.
 
 ```bash
 uv run pyinfra inventories/production.py deploys/stacks.py \
-  --limit retn0-srv-gcp-01 --data stack=komodo-periphery \
+  --limit host-01 --data stack=komodo-periphery \
   --data stack_env_file=/absolute/path/to/private.env --serial --yes
 ```
 
-Open **Servers** in Komodo, confirm `retn0-srv-gcp-01` is `OK`, and check that its Docker tab lists the existing `beszel-hub` container. Repeat for `retn0-srv-oci-01` and `retn0-srv-oci-02` by changing `--limit`.
+Open **Servers** in Komodo, confirm the target is `OK`, and check that its **Docker** tab loads the container list.
 
 After each host connects, remove the `PERIPHERY_ONBOARDING_KEY` line from its `.env` and rerun the same apply command without `stack_env_file`. This applies the updated environment and uses the stored keys for reconnection. Confirm the server returns to `OK`. Keep the `keys` volume across updates and container recreation.

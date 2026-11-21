@@ -1,9 +1,6 @@
 # Beszel NVIDIA Agent
 
-The NVIDIA agent on `retn0-srv-main` reports to the [GCP Hub](../beszel-hub/README.md) at `https://beszel.retn0.dev`. The GCP and OCI hosts use the [cloud agent definition](../beszel-agent/README.md). Each system has its own token.
-
-Beszel provides a web dashboard showing host and per-container CPU, memory, network, and disk statistics with historical charts and configurable alerts.
-It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common "is everything alive and healthy?" use case.
+This stack sends Linux host, Docker, and NVIDIA GPU metrics to a [Beszel Hub](../beszel-hub/README.md). For hosts without NVIDIA GPUs, see the [standard agent](../beszel-agent/README.md).
 
 ## What This Stack Contains
 
@@ -20,38 +17,27 @@ It replaces the heavier Prometheus + Grafana + Loki + Alloy stack for the common
 
 ## Portability
 
-`compose.yaml` is tracked by Git and represents this repository's NVIDIA Linux host baseline.
-It contains the agent, GPU, disk, S.M.A.R.T., and systemd service monitoring, healthchecks, and Docker socket proxy.
-
-Some values are inherently host-specific (partition names, SMART devices, sensor exclusions, service patterns, extra filesystem paths).
-They live in `compose.yaml` because this repository doubles as a shared self-hosted configuration, but you will need to adjust them when deploying elsewhere.
+Review the filesystem, SMART devices, sensor exclusions, systemd service patterns, and extra filesystem bind mounts in [`compose.yaml`](compose.yaml) for the target host. For example, set the extra filesystem bind source to a directory on the filesystem you want to monitor, such as `/path/to/extra-filesystem/.beszel`, and create that directory before starting the stack.
 
 ## Prerequisites
 
 - Docker Engine
 - Docker Compose v2
 - NVIDIA GPU and NVIDIA Container Toolkit
-- Access to the remote Hub over Tailscale and a registration for this system in that Hub
+- HTTPS access to the Hub and a registration for this system in the Hub
 
 ## Komodo
 
-Create a Stack named `beszel-agent-retn0-srv-main` on `retn0-srv-main` with the `homelab` Repo and `compose/beszel-agent-nvidia` as the run directory. Set Project Name to `beszel-agent-nvidia` to match the Compose project. Set the existing system's `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
+Select the target server and the Repo containing this definition. For a server named `host-01`, use the Stack name `beszel-agent-host-01` and the run directory `compose/beszel-agent-nvidia`. Set Project Name to `beszel-agent-nvidia` to match the Compose project and supply `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
 
-Store the existing system token as a single line in `/etc/komodo/secrets/beszel-agent-nvidia.token` with mode `600`. Compose mounts this file for the agent, which reads it through `TOKEN_FILE`. The host file stays outside Git and is shared by Komodo and manual Compose deployment.
+Register the host with **Add System** in Beszel. On the target host, store its token as one line in the file identified by `secrets.beszel_agent_token.file` in [`compose.yaml`](compose.yaml). Use mode `600` and keep the file outside Git. The agent reads the mounted secret through `TOKEN_FILE` in both Komodo and manual deployments.
 
 ## Manual deployment
 
 ```bash
 cd compose/beszel-agent-nvidia
 cp .env.example .env
-# Register this host using Add System in the target Hub.
-# Set BESZEL_HUB_URL and BESZEL_AGENT_KEY in .env.
-# Put the system token in the host file described above.
-
-# Create the marker directory used for additional filesystem monitoring.
-sudo mkdir -p /mnt/data01/.beszel
-
-# Start the NVIDIA agent and its Docker socket proxy.
+# Set BESZEL_HUB_URL and BESZEL_AGENT_KEY in .env, then prepare the token and extra filesystem directory described above.
 docker compose up -d
 ```
 
@@ -68,7 +54,7 @@ For manual deployments, supply these values in a local `.env` beside the Compose
 
 ## Persistent state
 
-The `beszel-agent-nvidia` project stores the agent's persistent identity in `beszel-agent-nvidia_beszel-agent-data`. When migrating from the `beszel` project, copy the existing state from `beszel_beszel-agent-data` before starting the new project. The old and new projects use the same container names, so take the old project down with its volume intact before deploying the new one.
+The `beszel-agent-data` named volume stores the agent's identity. Keep the volume and its associated system registration across deployments.
 
 ## Notifications
 

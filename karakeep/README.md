@@ -83,15 +83,15 @@ delivered.
 
 ### SMTP (Recommended)
 
-Set SMTP variables in `.env` and restart:
+Set SMTP variables in `.env`, then apply the updated configuration:
 
-```bash
+```dotenv
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=your_smtp_username
 SMTP_PASSWORD=your_smtp_password
-SMTP_FROM=Karakeep <no-reply@example.com>
+SMTP_FROM="Karakeep <no-reply@example.com>"
 ```
 
 ```bash
@@ -207,8 +207,7 @@ Notes:
 
 ### Option B: Ollama (Local, Recommended: OpenAI-compatible API)
 
-This host already has an `ollama` container on `caddy-network`, and this stack
-also joins `caddy-network`, so the simplest setup is:
+For example, if an Ollama container named `ollama` shares the `caddy-network` network with Karakeep:
 
 ```bash
 OPENAI_API_KEY=ollama

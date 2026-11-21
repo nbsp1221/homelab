@@ -95,7 +95,6 @@ After creating the initial workspace:
 Persistent state lives in the `multica_pgdata` and `multica_backend-uploads` volumes.
 Their names are explicit in Compose, so moving this project directory does not create a new empty database.
 Keep the top-level project name `multica` and these volume names when operating this deployment.
-Use this directory for future Compose commands; the former root-level `multica/` directory is no longer the deployment path.
 
 Back up both before upgrades, together with `.env` and any GitHub App private key.
 The VCS encryption key is required to recover stored provider credentials.
@@ -111,7 +110,7 @@ docker compose up -d --wait
 
 Keep backend and frontend on the same release. Database migrations are forward-only: restoring an older image alone is not a safe rollback after an upgrade; restore the pre-upgrade database and uploads together with the matching configuration if rollback is required.
 
-The v0.6.0 self-host release introduces anonymous telemetry. This project defaults `DO_NOT_TRACK` to `true` to opt out. Optional Redis, managed Cloud, plugin surfaces, LLM helpers, and new chat integrations are left unconfigured; enable them only when needed, following upstream documentation.
+This project defaults `DO_NOT_TRACK` to `true` to opt out of anonymous telemetry.
 
 Refer to the upstream Multica self-hosting and environment-variable documentation when changing application behavior.
 
@@ -120,15 +119,14 @@ Refer to the upstream Multica self-hosting and environment-variable documentatio
 - Keep `APP_ENV=production`, independent random credentials, and an empty `MULTICA_DEV_VERIFICATION_CODE`.
 - Keep general signup closed; use explicit invitations or a narrow email allowlist when adding users.
 - Keep PostgreSQL on the private project network. Application ports are not published to the host.
-- Expose the web and API through HTTPS. The current two-origin layout matches the upstream reverse-proxy recipe; browser requests remain on the web origin, so `COOKIE_DOMAIN` stays empty.
-- Preserve authenticated API and daemon WebSocket access through Cloudflare Tunnel. A browser-only access gate can prevent CLI, daemon, and webhook clients from connecting.
-- Keep Cloudflare Tunnel origin TLS verification enabled. Review Cloudflare access and caching rules in the dashboard; do not cache authenticated API or auth responses.
+- Use HTTPS for the web and API endpoints. Follow the network model above for proxy routing, cookies, and WebSockets.
+- If you use Cloudflare Tunnel, keep origin TLS verification enabled. Ensure any access rules allow authenticated CLI, daemon, and webhook traffic, and exclude authenticated API and login responses from caching.
 - Leave `MULTICA_TRUSTED_PROXIES` empty unless trusted proxy addresses are deliberately configured; never trust every caller's forwarded headers.
 - Keep `.env` and private key files at mode `600` and outside Git.
 - The backend and frontend use health checks, no privilege escalation, and no Linux capabilities.
 - Agent runs execute with the daemon user's permissions. Scope the daemon user's repositories and credentials deliberately; the server containers do not provide a sandbox for remote runs.
 
-The pinned `v0.6.0` official web image contains Next.js `16.3.4`, verified from the published Linux amd64 image on 2026-10-01. It includes the patched version for the AVIF image-optimization advisory (fixed in `16.3.3`), but remains in the affected version range of the Node.js `ImageResponse` advisory (fixed in `16.3.6`). The latter affects Node.js `next/og` routes that pass attacker-controlled values into SVG content, attributes, or styles; applicability to this deployment has not been established. The operator accepted this remaining version-level risk when requesting the latest official release. Upgrade to an official image containing the relevant patch and verify its actual Next.js version before considering that advisory resolved; container hardening is not a substitute for the patch.
+Check the Next.js version bundled in the frontend image against the advisories below when selecting an image.
 
 ## References
 

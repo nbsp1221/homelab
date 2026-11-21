@@ -35,7 +35,7 @@ They live in `compose.yaml` because this repository doubles as a shared self-hos
 
 ## Komodo
 
-Create a Stack named `beszel-agent-nvidia` on `retn0-srv-main` with the `homelab` Repo and `compose/beszel-agent-nvidia` as the run directory. Use the default Project Name so Komodo and Docker Compose use the same project name. Set the existing system's `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
+Create a Stack named `beszel-agent-retn0-srv-main` on `retn0-srv-main` with the `homelab` Repo and `compose/beszel-agent-nvidia` as the run directory. Set Project Name to `beszel-agent-nvidia` to match the Compose project. Set the existing system's `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
 
 Store the existing system token as a single line in `/etc/komodo/secrets/beszel-agent-nvidia.token` with mode `600`. Compose mounts this file for the agent, which reads it through `TOKEN_FILE`. The host file stays outside Git and is shared by Komodo and manual Compose deployment.
 

@@ -1,38 +1,29 @@
 # Beszel cloud agent
 
-This Compose project runs an outbound-only Beszel agent on the GCP and OCI hosts. Placement and Hub URLs are declared in [`hosts/`](../../hosts/README.md). The agents report to the [GCP Hub](../beszel-hub/README.md). The main host uses the [NVIDIA agent definition](../beszel-agent-nvidia/README.md).
+This Compose project runs an outbound-only Beszel agent on the GCP and OCI hosts. The agents report to the [GCP Hub](../beszel-hub/README.md). The main host uses the [NVIDIA agent definition](../beszel-agent-nvidia/README.md).
 
-The agent uses host networking for host interface metrics, but `DISABLE_SSH=true` disables its inbound SSH listener. Each host's `BESZEL_HUB_URL` selects the Hub for its outbound WebSocket connection. The GCP Hub and the main-host legacy Hub have separate databases and credentials; changing the URL alone does not register an agent with the new Hub.
+The agent uses host networking for host interface metrics. `DISABLE_SSH=true` turns off its inbound SSH listener, and `BESZEL_HUB_URL` selects the Hub for its outbound WebSocket connection.
 
 Docker container monitoring keeps the cloud hosts' existing direct `/var/run/docker.sock:ro` mount. This is the smallest change that preserves its current metrics and avoids adding a proxy service. The `:ro` mount protects the socket path from filesystem writes, but it does not restrict Docker API requests; access to the Docker daemon remains highly privileged. If that risk becomes unacceptable, use a restricted socket proxy like the main host rather than assuming `:ro` makes the API read-only.
 
-## Host prerequisites
+## Komodo
 
-- Docker Engine and Compose, already installed by the `pyinfra` baseline.
-- Connectivity to the private Hub endpoint declared in that host's definition. The Hub resolves to a Tailscale address; this deployment does not require Tailscale Serve.
-- The Beszel Hub public key and a token issued for this specific system through **Add System**. Keep both in the host-local `.env`, not in Git. Do not use a Universal Token for these agents.
+Create a Stack named `beszel-agent-<server>` on each target server. Use the `homelab` Repo, `compose/beszel-agent` as the run directory, and `beszel-agent` as the Project Name. Set `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. Agents that report to the same Hub use the same URL and Hub public key.
 
-## First deployment
+Store each system's token as a single line in `/etc/komodo/secrets/beszel-agent.token` on its server with mode `600`. Compose mounts this file and the agent reads it through `TOKEN_FILE`. The same path works for manual Compose deployments with the remaining variables in a local `.env` beside the Compose file.
 
-Add each host as a separate system in the Beszel Hub and copy the generated public key and system-specific token into that host's `.env` using `.env.example` as a guide. Restrict the file to the operator account. The [pyinfra executor](../../deploy/pyinfra/README.md) copies `compose.yaml` to `/opt/stacks/beszel-agent` when explicitly invoked. Keep `./data` persistent: Beszel stores the agent identity there. The Hub URL comes from the host definition and is synchronized into the target's `.env`, so normal `docker compose` commands work there too.
+## Migration
 
-```bash
-cd /opt/stacks/beszel-agent
-chmod 600 .env
-docker compose ps
-docker compose exec -T beszel-agent /agent health
-```
+For each existing agent, keep its current system registration, token, and data. Prepare that token in the file above and copy `/opt/stacks/beszel-agent/data/` into the `beszel-agent_beszel-agent-data` Docker volume, including the fingerprint. Keep the old Compose project files and data on the host for rollback.
 
-The Hub should show one online entry for the host. Do not create a duplicate system record for an existing agent.
+After preparing the token and volume, take down the old project using its Compose file and deploy the Stack in Komodo. Verify that the new agent is healthy and the existing system in the Hub receives fresh host and Docker metrics.
 
-For an existing installation, preserve its `data/` directory and current key/token while replacing the Compose definition. Do not run `docker compose down --volumes`; Compose may recreate the existing `beszel-agent` container briefly during the migration. Verify the Hub connection, host metrics, and Docker metrics after deployment.
-
-When moving an agent to another Hub, register that system through the new Hub's **Add System** flow and replace its host-local key/token with the new Hub's public key and system-specific token. Back up the current private `.env` outside Git for rollback, preserve `data/`, update only that host's `BESZEL_HUB_URL`, and apply `--limit <host> --data stack=beszel-agent`. Require fresh host and Docker metrics in the new Hub before removing the legacy system registration. Keep Hub login credentials and any one-time registration scripts outside the repository.
+For a new host, register it through **Add System** in the Hub and use the token issued for that system.
 
 ## Local validation
 
 ```bash
-BESZEL_HUB_URL=https://beszel.retn0.dev \
-  docker compose --env-file .env.example config --quiet
+BESZEL_HUB_URL=https://beszel.example.com BESZEL_AGENT_KEY=placeholder \
+  docker compose config --quiet
 pnpm lint:compose
 ```

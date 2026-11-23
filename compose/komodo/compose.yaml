@@ -82,11 +82,13 @@ services:
       ## Allow Periphery to see processes outside of container
       - /proc:/proc
       ## Specify the Periphery agent root directory.
-      ## All your configs / repos must be children of this directory for Periphery to be able to see it.
+      ## Used for Periphery's default working directories.
       ## Must be the same inside and outside the container,
       ## or docker will get confused. See https://github.com/moghtech/komodo/discussions/180.
       ## Default: /etc/komodo.
       - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+      ## Without PROJECTS_DIR, Compose merges this with the root mount above.
+      - ${PROJECTS_DIR:-${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}}:${PROJECTS_DIR:-${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}}
       ## Optionally mount a custom periphery.config.toml
       # - /path/to/periphery.config.toml:/config/config.toml
       ## Optionally mount custom root CA certificate to trust

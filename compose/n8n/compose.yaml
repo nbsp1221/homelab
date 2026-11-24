@@ -3,8 +3,8 @@ name: n8n
 services:
   postgres:
     image: postgres:17
-    restart: unless-stopped
     init: true
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -13,11 +13,11 @@ services:
       POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
     expose:
       - "5432"
+    networks:
+      - n8n-network
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
-    networks:
-      - n8n-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -35,17 +35,17 @@ services:
       - everysec
       - --requirepass
       - ${REDIS_PASSWORD}
-    restart: unless-stopped
     init: true
+    restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     expose:
       - "6379"
-    volumes:
-      - redis-data:/data
     networks:
       - n8n-network
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -53,9 +53,14 @@ services:
       retries: 5
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n
-    restart: unless-stopped
+    image: docker.n8n.io/n8nio/n8n:2.49.5@sha256:c349b24d6e242b4ea14d75e6f1a90c50e348cf4b1c4512b4a0a50219ead6533d
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     init: true
+    restart: unless-stopped
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -72,16 +77,11 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
       NODE_FUNCTION_ALLOW_BUILTIN: "*"
-    volumes:
-      - n8n-data:/home/node/.n8n
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - n8n-network
       - caddy-network
+    volumes:
+      - n8n-data:/home/node/.n8n
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://127.0.0.1:${N8N_PORT}/healthz", "-q"]
       interval: 30s

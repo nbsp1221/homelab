@@ -40,7 +40,7 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 ## Quick Start
 
 ```bash
-cd n8n
+cd compose/n8n
 cp .env.example .env
 # edit .env before first start
 
@@ -101,8 +101,7 @@ If the workflow estate becomes more controlled later, that setting should be rev
 
 ## Migration Note
 
-Migration from the old standalone n8n repository is a separate manual process.
-This stack definition only describes the canonical target deployment in this repository.
+When moving an existing installation to a new checkout or deployment tool, keep the Compose project name `n8n` to reuse the three existing volumes. Keep the current `N8N_ENCRYPTION_KEY` so n8n can decrypt stored credentials. Keep `init-db.sh` next to `compose.yaml` so the relative mount resolves from the new checkout.
 
 ## Operations
 

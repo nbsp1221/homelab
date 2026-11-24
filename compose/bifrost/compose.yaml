@@ -25,7 +25,7 @@ services:
     networks:
       - caddy-network
     volumes:
-      - ./data:/app/data
+      - bifrost-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
       interval: 30s
@@ -43,3 +43,6 @@ networks:
   caddy-network:
     name: caddy-network
     external: true
+
+volumes:
+  bifrost-data:

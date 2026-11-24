@@ -8,7 +8,7 @@ This stack:
 - joins the external Docker network `caddy-network`
 - does not publish ports to the host
 - expects your reverse proxy to route to `bifrost:8080`
-- persists Bifrost SQLite state under `./data/`
+- persists Bifrost SQLite state in the `bifrost-data` Docker volume
 
 ## Prerequisites
 
@@ -39,13 +39,13 @@ docker compose logs -f
 
 ## Secrets
 
-- `BIFROST_ENCRYPTION_KEY` encrypts stored provider keys and other secrets. Back it up with `./data/`; changing it can make existing secrets unreadable.
+- `BIFROST_ENCRYPTION_KEY` encrypts stored provider keys and other secrets. Back it up with the volume. Changing the key can make existing secrets unreadable.
 - `BIFROST_SETUP_TOKEN` authorizes creation of the first admin account on a fresh deployment. It is not needed for normal operation after an admin exists.
 
 ## Configuration
 
 This stack intentionally runs Bifrost in Web UI configuration mode.
-Do not commit `data/config.json`; when no config file is present, Bifrost stores configuration in SQLite under `./data/`.
+When no config file is present, Bifrost stores configuration in SQLite under `/app/data` in the container.
 
 The Compose file provides non-secret runtime settings directly:
 
@@ -95,11 +95,13 @@ docker compose down
 
 ## Data Persistence / Backups
 
-Persistent runtime data is stored in `./data/`.
+The `bifrost-data` volume is mounted at `/app/data` in the container. With the default Compose project name, Docker calls the volume `bifrost_bifrost-data`.
+
+For an existing installation that bind-mounts `./data/`, stop Bifrost and copy the entire directory into the volume, preserving ownership and permissions. Use the same encryption key when starting Bifrost with the volume.
 
 Back up:
 
-- `./data/`
+- the `bifrost-data` volume
 - `BIFROST_ENCRYPTION_KEY`
 
 ## References

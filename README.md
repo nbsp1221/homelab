@@ -90,7 +90,7 @@ docker compose down
 | Karakeep | [`karakeep/`](karakeep/) | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |
 | LiteLLM Proxy + Postgres | [`litellm/`](litellm/) | Standardized LLM proxy. See `litellm/README.md`. |
 | Bifrost AI Gateway | [`compose/bifrost/`](compose/bifrost/) | OpenAI-compatible AI gateway. |
-| n8n | [`n8n/`](n8n/) | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `n8n/README.md`. |
+| n8n | [`compose/n8n/`](compose/n8n/) | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `compose/n8n/README.md`. |
 | OpenClaw Gateway + CLI | [`openclaw/`](openclaw/) | Agent gateway and CLI onboarding. See `openclaw/README.md` (then run `cd openclaw && python3 setup.py`). |
 | OpenCodex | [`compose/opencodex/`](compose/opencodex/) | Minimal remote OpenCodex proxy for Codex CLI, App, and IDE clients. See `compose/opencodex/README.md`. |
 | RisuAI | [`risuai/`](risuai/) | Web app, expects a reverse proxy on `caddy-network`. Persistent data in `risuai/save/`. |

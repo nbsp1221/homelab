@@ -19,6 +19,10 @@ docker compose ps
 
 Check that MongoDB and Core report healthy. The MongoDB probe checks command responsiveness, and the Core probe checks HTTP on `/version`. Sign in through Caddy and verify that the `Local` server reports `Ok` and lists its containers.
 
+## Use existing project files
+
+Set `PROJECTS_DIR` in the deployment directory's `.env` to an existing absolute path, such as `/srv/projects`. Periphery mounts it at the same path on the host and in the container. Run `docker compose up -d --no-deps periphery` to apply the mount to an existing installation. In Komodo, choose **Files On Server**, enter the project's absolute path in **Run Directory**, and verify the Compose file in **Info**.
+
 ## State and recovery
 
 Periphery uses `/etc/komodo` at the same path inside the container and on the host. Core and local Periphery share the `komodo_keys` Docker volume. MongoDB uses the `komodo_mongo-data` and `komodo_mongo-config` volumes. The official scheduled database backup writes to `/etc/komodo/backups`. Retain the database backup, connection keys, and private environment file together for recovery. Follow [Komodo's database restore procedure](https://komo.do/docs/setup/backup#restore) when restoring a backup.

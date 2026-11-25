@@ -6,6 +6,8 @@ This project runs Arcane Manager on the management host using the [official Dock
 
 Copy `compose.yaml` and `.env.example` to a deployment directory on the management host, such as `~/compose/arcane/`. On first install, use `.env.example` to create a private `.env` with mode `0600`. Generate `ARCANE_ENCRYPTION_KEY` with `openssl rand -hex 32`. Keep the existing `.env` when upgrading.
 
+Arcane joins the external `caddy-network` network. For HTTPS, attach Caddy to that network, forward the site to `arcane:3552`, and set `ARCANE_APP_URL` in `.env` to the URL opened by users, such as `https://arcane.example.com`. Caddy forwards the WebSocket connections that Arcane uses for live updates. See the [Arcane reverse proxy guide](https://getarcane.app/docs/networking/reverse-proxy).
+
 Run the following from the deployment directory.
 
 ```sh
@@ -14,7 +16,7 @@ docker compose pull
 docker compose up -d --wait --wait-timeout 120
 ```
 
-Open `http://localhost:3552` on the management host. To connect from another machine, forward the loopback port over SSH and open the same URL on that machine.
+Open the URL configured in `ARCANE_APP_URL`. For a local install using the default `http://localhost:3552`, forward the loopback port over SSH to access it from another machine.
 
 ```sh
 ssh -N -L 3552:127.0.0.1:3552 admin@manager.example.com

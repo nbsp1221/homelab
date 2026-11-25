@@ -4,7 +4,8 @@ Personal homelab infrastructure and self-hosted services managed as code
 
 This repository contains mostly independent Docker Compose stacks for self-hosted services and tools for configuring Linux hosts.
 
-- [`compose/`](compose/): the canonical Compose definition for each adopted stack.
+- [`stacks/`](stacks/) holds new stack definitions. Each stack starts with `README.md`, `.env.example`, and `compose.yaml`.
+- [`compose/`](compose/) holds existing stack definitions during the transition.
 - [`hosts/`](hosts/): which host runs an adopted stack and its non-secret host-specific values.
 - [`deploy/`](deploy/): manually invoked executors that apply those definitions.
 
@@ -44,7 +45,7 @@ The [pyinfra executor](deploy/pyinfra/README.md) runs from a controller with SSH
 
 ## Testing
 
-- **Compose**. Run `pnpm install --frozen-lockfile` and `pnpm lint` from the repository root.
+- **Compose**. Run `pnpm install --frozen-lockfile` and `pnpm lint` from the repository root to check `compose/` and `stacks/`.
 - **pyinfra**. Follow the [pyinfra setup and validation commands](deploy/pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
 - **RisuAI**. Check out the upstream revision pinned in the [Dockerfile](risuai/Dockerfile) and apply the repository's [patch series](risuai/patches/series) with [`apply-patches.sh`](risuai/patches/apply-patches.sh). Run the regression test against the patched checkout. It was verified with Node.js 24.
 
@@ -85,7 +86,7 @@ docker compose down
 
 | Service | Path | Notes |
 | --- | --- | --- |
-| Arcane | [`compose/arcane/`](compose/arcane/) | Docker management and monitoring. See [setup and verification](compose/arcane/README.md). |
+| Arcane | [`stacks/arcane/`](stacks/arcane/) | Docker management and monitoring. See [setup and verification](stacks/arcane/README.md). |
 | Monitoring | [`monitoring/`](monitoring/) | Prometheus + node-exporter + cAdvisor + Grafana. See `monitoring/README.md`. |
 | Infisical | [`infisical/`](infisical/) | Secrets management platform with Postgres and Redis. See `infisical/README.md`. |
 | Karakeep | [`karakeep/`](karakeep/) | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |

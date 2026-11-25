@@ -1,0 +1,26 @@
+name: arcane-agent
+
+services:
+  arcane-agent:
+    # Arcane Manager checks the outbound tunnel. The agent has no health endpoint.
+    # composelint-disable-next-line require-healthcheck
+    image: ghcr.io/getarcaneapp/agent:v3.1.1
+    container_name: arcane-agent
+    restart: unless-stopped
+    environment:
+      - ARCANE_AGENT=true
+      - ARCANE_AGENT_TRANSPORT=auto
+      - ARCANE_AGENT_TOKEN_FILE=/run/secrets/arcane-agent-token
+      - ARCANE_MANAGER_API_URL=${ARCANE_MANAGER_API_URL:?Set ARCANE_MANAGER_API_URL}
+    secrets:
+      - arcane-agent-token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - arcane-data:/app/data
+
+volumes:
+  arcane-data:
+
+secrets:
+  arcane-agent-token:
+    file: ./.env.arcane-agent-token

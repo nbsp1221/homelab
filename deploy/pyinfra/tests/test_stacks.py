@@ -164,11 +164,19 @@ def test_periphery_bootstrap_uses_ssh_home_and_only_seeds_missing_env(
         files.block.assert_not_called()
 
 
-@pytest.mark.parametrize("stack", ["caddy-gcp", "beszel-agent", "beszel-hub"])
+@pytest.mark.parametrize(
+    ("stack", "source_root"),
+    [
+        ("caddy-gcp", "compose"),
+        ("beszel-agent", "compose"),
+        ("beszel-hub", "compose"),
+        ("example-agent", "stacks"),
+    ],
+)
 def test_stack_plan_validates_before_promotion_and_reloads_only_caddy(
-    tmp_path, monkeypatch, stack
+    tmp_path, monkeypatch, stack, source_root
 ) -> None:
-    project = tmp_path / "compose" / stack
+    project = tmp_path / source_root / stack
     project.mkdir(parents=True)
     (project / "compose.yaml").write_text("name: example\n")
     if stack == "caddy-gcp":

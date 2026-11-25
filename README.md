@@ -87,6 +87,7 @@ docker compose down
 | Service | Path | Notes |
 | --- | --- | --- |
 | Arcane | [`stacks/arcane/`](stacks/arcane/) | Docker management and monitoring. See [setup and verification](stacks/arcane/README.md). |
+| Arcane Agent | [`stacks/arcane-agent/`](stacks/arcane-agent/) | Connects a remote Docker host to Arcane Manager. |
 | Monitoring | [`monitoring/`](monitoring/) | Prometheus + node-exporter + cAdvisor + Grafana. See `monitoring/README.md`. |
 | Infisical | [`infisical/`](infisical/) | Secrets management platform with Postgres and Redis. See `infisical/README.md`. |
 | Karakeep | [`karakeep/`](karakeep/) | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |

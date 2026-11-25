@@ -46,6 +46,20 @@ def test_host_definitions_preserve_stack_settings(tmp_path) -> None:
     }
 
 
+def test_cloud_inventory_can_load_host_assignments_outside_the_repository(
+    tmp_path, monkeypatch
+) -> None:
+    write_host(tmp_path, "private-pilot", "provider: oci\nstacks: {}\n")
+    monkeypatch.setenv("HOMELAB_HOSTS_DIR", str(tmp_path))
+
+    inventory = runpy.run_path(
+        str(Path(__file__).parents[1] / "inventories/production.py")
+    )
+
+    assert inventory["gcp"] == []
+    assert inventory["oci"] == ["private-pilot"]
+
+
 def test_host_definitions_reject_invalid_stack_paths(tmp_path) -> None:
     write_host(
         tmp_path, "cloud-a", "provider: gcp\nstacks:\n  ../other:\n    env: {}\n"

@@ -25,6 +25,7 @@ services:
       retries: 5
       start_period: 15s
     cgroup: host
+
 networks:
   caddy-network:
     external: true

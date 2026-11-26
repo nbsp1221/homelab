@@ -5,11 +5,3 @@ stacks:
       CADDY_DOMAIN: beszel.retn0.dev
       CADDY_BIND_IPV4: 100.82.114.104
       CADDY_BIND_IPV6: fd7a:115c:a1e0::7536:7269
-  beszel-hub:
-    env:
-      BESZEL_APP_URL: https://beszel.retn0.dev
-  komodo-periphery:
-    bootstrap: true
-    env:
-      PERIPHERY_CORE_ADDRESS: https://komodo.retn0.dev
-      PERIPHERY_CONNECT_AS: retn0-srv-gcp-01

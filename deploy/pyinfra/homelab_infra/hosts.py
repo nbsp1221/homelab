@@ -1,4 +1,5 @@
 import re
+from os import environ
 from pathlib import Path
 
 import yaml
@@ -7,7 +8,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 HOSTS_DIR = REPO_ROOT / "hosts"
 
 
-def load_hosts(hosts_dir: Path = HOSTS_DIR) -> dict[str, dict]:
+def load_hosts(hosts_dir: Path | None = None) -> dict[str, dict]:
+    if hosts_dir is None:
+        hosts_dir = Path(environ.get("HOMELAB_HOSTS_DIR", str(HOSTS_DIR)))
+    if not hosts_dir.is_dir():
+        raise ValueError(f"Missing hosts directory: {hosts_dir}")
     hosts = {}
     for path in sorted(hosts_dir.glob("*/host.yaml")):
         config = yaml.safe_load(path.read_text())

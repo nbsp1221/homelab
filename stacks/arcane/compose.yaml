@@ -1,0 +1,34 @@
+name: arcane
+
+services:
+  arcane:
+    image: ghcr.io/getarcaneapp/manager:v3.1.1
+    container_name: arcane
+    restart: unless-stopped
+    environment:
+      - ARCANE_APP_URL=${ARCANE_APP_URL:-http://localhost:3552}
+      - PUID=1000
+      - PGID=1000
+      - ARCANE_ENCRYPTION_KEY=${ARCANE_ENCRYPTION_KEY:?Set ARCANE_ENCRYPTION_KEY}
+    ports:
+      - "127.0.0.1:3552:3552"
+    networks:
+      - default
+      - caddy-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - arcane-data:/app/data
+    healthcheck:
+      test: ["CMD", "./arcane", "health", "--timeout", "2s"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    cgroup: host
+
+networks:
+  caddy-network:
+    external: true
+
+volumes:
+  arcane-data:

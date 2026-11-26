@@ -7,7 +7,7 @@
   "packageManager": "pnpm@11.20.0",
   "scripts": {
     "lint": "pnpm run lint:compose",
-    "lint:compose": "composelint compose/ --max-warnings 0"
+    "lint:compose": "composelint compose/ stacks/ --max-warnings 0"
   },
   "devDependencies": {
     "composelint": "0.2.0"

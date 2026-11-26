@@ -26,9 +26,11 @@ if env_source:
         raise ValueError("Environment source must be a private local file (mode 600)")
 
 for stack, settings in select_stacks(definition["stacks"], selected).items():
-    source = REPO_ROOT / "compose" / stack / "compose.yaml"
+    source = REPO_ROOT / "stacks" / stack / "compose.yaml"
     if not source.is_file():
-        raise ValueError(f"Missing Compose project: {source}")
+        source = REPO_ROOT / "compose" / stack / "compose.yaml"
+    if not source.is_file():
+        raise ValueError(f"Missing Compose project for {stack} in stacks/ or compose/")
 
     environment = settings.get("env", {})
     bootstrap = settings.get("bootstrap", False)

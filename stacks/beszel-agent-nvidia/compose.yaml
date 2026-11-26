@@ -14,13 +14,12 @@ services:
       TOKEN_FILE: /run/secrets/beszel_agent_token
       HUB_URL: ${BESZEL_HUB_URL:?}
       DISABLE_SSH: "true"
-      FILESYSTEM: nvme0n1p5
+      FILESYSTEM: ${BESZEL_FILESYSTEM:?Set BESZEL_FILESYSTEM}
       GPU_COLLECTOR: nvidia-smi
-      # Ignore invalid readings from unused NCT6798 motherboard inputs.
-      SENSORS: "-nct6798_systin,nct6798_auxtin*"
-      SMART_DEVICES: /dev/nvme0:nvme,/dev/sda:sat
+      SENSORS: ${BESZEL_SENSORS:-}
+      SMART_DEVICES: ${BESZEL_SMART_DEVICES:?Set BESZEL_SMART_DEVICES}
       DOCKER_HOST: tcp://127.0.0.1:2375
-      SERVICE_PATTERNS: "containerd*,docker*,fail2ban*,nvidia-persistenced*,smartmontools*,smbd*,ssh*,tailscaled*"
+      SERVICE_PATTERNS: ${BESZEL_SERVICE_PATTERNS:-}
     secrets:
       - beszel_agent_token
     network_mode: host # composelint-disable-line no-host-network -- host interface metrics require it; SSH is disabled
@@ -28,14 +27,14 @@ services:
       - beszel-agent-data:/var/lib/beszel-agent
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
       - type: bind
-        source: /mnt/data01/.beszel
+        source: ${BESZEL_EXTRA_FILESYSTEM_PATH:?Set BESZEL_EXTRA_FILESYSTEM_PATH}
         target: /extra-filesystems/sda1
         read_only: true
         bind:
           create_host_path: false
     devices:
-      - /dev/nvme0:/dev/nvme0
-      - /dev/sda:/dev/sda
+      - ${BESZEL_NVME_DEVICE:?Set BESZEL_NVME_DEVICE}:${BESZEL_NVME_DEVICE:?Set BESZEL_NVME_DEVICE}
+      - ${BESZEL_SECONDARY_DEVICE:?Set BESZEL_SECONDARY_DEVICE}:${BESZEL_SECONDARY_DEVICE:?Set BESZEL_SECONDARY_DEVICE}
     healthcheck:
       test: ["CMD", "/agent", "health"]
       interval: 120s
@@ -75,4 +74,4 @@ volumes:
 
 secrets:
   beszel_agent_token:
-    file: /etc/komodo/secrets/beszel-agent-nvidia.token
+    file: ${BESZEL_AGENT_TOKEN_PATH:?Set BESZEL_AGENT_TOKEN_PATH}

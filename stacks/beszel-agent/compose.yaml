@@ -29,4 +29,4 @@ volumes:
 
 secrets:
   beszel_agent_token:
-    file: /etc/komodo/secrets/beszel-agent.token
+    file: ${BESZEL_AGENT_TOKEN_PATH:?Set BESZEL_AGENT_TOKEN_PATH}

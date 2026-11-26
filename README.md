@@ -92,7 +92,10 @@ docker compose down
 | Infisical | [`infisical/`](infisical/) | Secrets management platform with Postgres and Redis. See `infisical/README.md`. |
 | Karakeep | [`karakeep/`](karakeep/) | Bookmark manager with full-text search and optional AI tagging/summaries. See `karakeep/README.md`. |
 | LiteLLM Proxy + Postgres | [`litellm/`](litellm/) | Standardized LLM proxy. See `litellm/README.md`. |
-| Bifrost AI Gateway | [`compose/bifrost/`](compose/bifrost/) | OpenAI-compatible AI gateway. |
+| Beszel Hub | [`stacks/beszel-hub/`](stacks/beszel-hub/) | Host and Docker monitoring. |
+| Beszel Agent | [`stacks/beszel-agent/`](stacks/beszel-agent/) | Host and Docker metrics. See also the [NVIDIA variant](stacks/beszel-agent-nvidia/). |
+| Bifrost AI Gateway | [`stacks/bifrost/`](stacks/bifrost/) | OpenAI-compatible AI gateway. |
+| PocketRisu | [`stacks/pocketrisu/`](stacks/pocketrisu/) | Self-hosted AI chat application. |
 | n8n | [`n8n/`](n8n/) | Workflow automation stack with Postgres and internal Redis for workflow shared state. See `n8n/README.md`. |
 | OpenClaw Gateway + CLI | [`openclaw/`](openclaw/) | Agent gateway and CLI onboarding. See `openclaw/README.md` (then run `cd openclaw && python3 setup.py`). |
 | OpenCodex | [`compose/opencodex/`](compose/opencodex/) | Minimal remote OpenCodex proxy for Codex CLI, App, and IDE clients. See `compose/opencodex/README.md`. |

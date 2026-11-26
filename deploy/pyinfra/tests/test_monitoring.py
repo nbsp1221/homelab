@@ -17,14 +17,11 @@ def monitoring_stacks():
                 "CADDY_BIND_IPV6": "2001:db8::20",
             }
         },
-        "beszel-hub": {},
     }
 
 
-@pytest.mark.parametrize("missing", ["caddy-gcp", "beszel-hub"])
-def test_checks_require_both_proxy_and_hub(monitoring_stacks, missing) -> None:
-    del monitoring_stacks[missing]
-    assert build_monitoring_verification({"stacks": monitoring_stacks}) == ""
+def test_checks_skip_hosts_without_monitoring_proxy() -> None:
+    assert build_monitoring_verification({"stacks": {}}) == ""
 
 
 @pytest.mark.parametrize(

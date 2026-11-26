@@ -93,7 +93,7 @@ uv run pyinfra inventories/production.py deploys/stacks.py \
   --limit gcp-01 --serial --yes
 ```
 
-A host stack with `bootstrap: true` uses a directory in the target SSH user's home and runs only when explicitly selected with `--data stack=<name>`. See [Komodo Periphery](../../compose/komodo-periphery/README.md) for an onboarding example.
+A host stack with `bootstrap: true` uses a directory in the target operator's home and runs only when explicitly selected with `--data stack=<name>`. See [Arcane Agent](../../stacks/arcane-agent/README.md) for a remote onboarding example.
 
 Set `HOMELAB_HOSTS_DIR` to a directory outside the repository to use private host assignments. It replaces the default `hosts/` directory for both cloud inventory discovery and stack selection. See the [Arcane Agent bootstrap](../../stacks/arcane-agent/README.md) for an example.
 
@@ -103,7 +103,7 @@ Select one assigned stack with `--data stack=caddy-gcp` to avoid applying other 
 
 An explicit `--data stack_env_file=/absolute/path/to/private.env` can seed an absent target `.env` for the selected stack. The local file must have private permissions, and `--diff` is rejected for this operation. Secret values and host values are uploaded together because pyinfra plans file operations before execution. Existing remote environment files are preserved. Use this only for initial provisioning; subsequent deployments do not need the local credential file.
 
-See the [Caddy stack](../../compose/caddy-gcp/README.md) and [Beszel Hub stack](../../compose/beszel-hub/README.md) for configuration and validation. When using both, deploy `caddy-gcp` first so their shared Docker network exists.
+Deploy the [GCP Caddy stack](../../compose/caddy-gcp/README.md) to create the shared network before deploying [Beszel Hub](../../stacks/beszel-hub/README.md) with Arcane. The `verify_monitoring.py` deploy checks both endpoints over TLS.
 
 `baseline.py` does not perform a whole-system package upgrade or reboot a
 host. Run it twice after a change; the second run should report zero changed

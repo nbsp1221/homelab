@@ -98,18 +98,23 @@ def test_deploy_rejects_an_assignment_without_a_compose_file(
 
 
 @pytest.mark.parametrize("has_env", [False, True])
-def test_periphery_bootstrap_uses_ssh_home_and_only_seeds_missing_env(
+def test_bootstrap_uses_operator_home_and_only_seeds_missing_env(
     tmp_path, monkeypatch, has_env
 ) -> None:
     name = "fake-cloud-host"
     user = "ssh-user"
-    stack = "komodo-periphery"
+    stack = "example-agent"
     home = "/custom/home/ssh-user"
     target = f"{home}/compose/{stack}"
-    environment = {"PERIPHERY_CONNECT_AS": name}
+    environment = {"EXAMPLE_AGENT_NAME": name}
     seed = tmp_path / "private.env"
-    seed.write_text("PERIPHERY_ONBOARDING_KEY=test-placeholder\n")
+    seed.write_text("EXAMPLE_REGISTRATION_KEY=test-placeholder\n")
     seed.chmod(0o600)
+    project = tmp_path / "stacks" / stack
+    project.mkdir(parents=True)
+    (project / "compose.yaml").write_text("name: example\n")
+    (project / ".env.example").write_text("EXAMPLE_REGISTRATION_KEY=\n")
+    monkeypatch.setattr(hosts, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(
         hosts,
         "load_hosts",
@@ -159,8 +164,8 @@ def test_periphery_bootstrap_uses_ssh_home_and_only_seeds_missing_env(
     else:
         (upload,) = env_uploads
         assert upload["mode"] == "600"
-        assert "PERIPHERY_ONBOARDING_KEY=test-placeholder" in upload["src"].getvalue()
-        assert f'PERIPHERY_CONNECT_AS="{name}"' in upload["src"].getvalue()
+        assert "EXAMPLE_REGISTRATION_KEY=test-placeholder" in upload["src"].getvalue()
+        assert f'EXAMPLE_AGENT_NAME="{name}"' in upload["src"].getvalue()
         files.block.assert_not_called()
 
 
@@ -169,7 +174,7 @@ def test_periphery_bootstrap_uses_ssh_home_and_only_seeds_missing_env(
     [
         ("caddy-gcp", "compose"),
         ("beszel-agent", "compose"),
-        ("beszel-hub", "compose"),
+        ("beszel-hub", "stacks"),
         ("example-agent", "stacks"),
     ],
 )

@@ -26,7 +26,7 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 ## Quick Start
 
 ```bash
-cd compose/bifrost
+cd stacks/bifrost
 cp .env.example .env
 chmod 600 .env
 printf 'BIFROST_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" > .env
@@ -36,6 +36,10 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f
 ```
+
+## Arcane Git Sync
+
+Create a [Pull sync](https://getarcane.app/docs/docker/git-sync#create-a-git-synced-project) with the project name `bifrost` and Compose File Path `stacks/bifrost/compose.yaml`. Enable **Sync Files** for the Dockerfile, patch, and build context. For an existing gateway, preserve the current `BIFROST_ENCRYPTION_KEY` and volume. Use the existing key in the private sync environment and verify a request through a configured provider after the cutover.
 
 ## Secrets
 

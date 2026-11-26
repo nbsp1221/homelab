@@ -1,7 +1,2 @@
 provider: oci
-stacks:
-  komodo-periphery:
-    bootstrap: true
-    env:
-      PERIPHERY_CORE_ADDRESS: https://komodo.retn0.dev
-      PERIPHERY_CONNECT_AS: retn0-srv-oci-01
+stacks: {}

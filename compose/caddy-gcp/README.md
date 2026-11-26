@@ -1,6 +1,6 @@
 # GCP HTTPS entrypoint
 
-This stack provides an HTTPS reverse proxy for [Beszel Hub](../beszel-hub/README.md) over Tailscale. Caddy returns `gcp-caddy-ok` at `/healthz` so the proxy can be checked independently of the Hub.
+This stack provides an HTTPS reverse proxy for [Beszel Hub](../../stacks/beszel-hub/README.md) over Tailscale. Caddy returns `gcp-caddy-ok` at `/healthz` so the proxy can be checked independently of the Hub.
 
 ## Configuration and state
 
@@ -23,7 +23,7 @@ uv run pyinfra inventories/production.py deploys/stacks.py \
   --limit gcp-01 --data stack=caddy-gcp --serial --yes
 ```
 
-Deploy `caddy-gcp` before [`beszel-hub`](../beszel-hub/README.md) so their shared Docker network exists. The executor validates the staged Compose and Caddy files, applies the project while preserving its volumes, then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose).
+Deploy `caddy-gcp` before [`beszel-hub`](../../stacks/beszel-hub/README.md) so their shared Docker network exists. The executor validates the staged Compose and Caddy files, applies the project while preserving its volumes, then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose).
 
 ## Verify
 

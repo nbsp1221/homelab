@@ -9,7 +9,7 @@
 - Volume: `pocketrisu-data` mounted at `/app/save`. Compose derives the Docker volume name `pocketrisu_pocketrisu-data` from the project name and volume key. Keep the project name when updating to reuse the same volume.
 - The external Docker network `caddy-network` must exist. Configure your HTTPS reverse proxy on that network to forward to `pocketrisu:6001`. Compose publishes no host port.
 
-In Komodo, select the target server and Repo, and set the run directory to `compose/pocketrisu`. Keep `pocketrisu` as the Compose project name. For manual deployment, run these commands from this directory:
+In Arcane, create a [Pull sync](https://getarcane.app/docs/docker/git-sync#create-a-git-synced-project) on the target host. Use `pocketrisu` as the sync and Compose project name and `stacks/pocketrisu/compose.yaml` as the Compose File Path. For manual deployment, run these commands from this directory.
 
 ```sh
 docker compose config --quiet
@@ -47,7 +47,7 @@ be done while the service is stopped and must preserve the complete data set.
 
 ## Updates and checks
 
-Take a complete backup before changing the image tag in `compose.yaml`. Redeploy the Stack in Komodo with the updated definition, or use these commands for a manual deployment:
+Take a complete backup before changing the image tag in `compose.yaml`. Use **Sync from Git** in Arcane to apply the updated definition, or use these commands for a manual deployment.
 
 ```sh
 docker compose pull pocketrisu

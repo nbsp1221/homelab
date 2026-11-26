@@ -17,7 +17,7 @@ This stack sends Linux host, Docker, and NVIDIA GPU metrics to a [Beszel Hub](..
 
 ## Portability
 
-Review the filesystem, SMART devices, sensor exclusions, systemd service patterns, and extra filesystem bind mounts in [`compose.yaml`](compose.yaml) for the target host. For example, set the extra filesystem bind source to a directory on the filesystem you want to monitor, such as `/path/to/extra-filesystem/.beszel`, and create that directory before starting the stack.
+Use [`.env.example`](.env.example) to set filesystem, SMART device, sensor, systemd service, and extra filesystem bind values for the target host. For an existing agent, reuse the current values to keep the same series in the Hub. The extra filesystem directory must exist on the host before deployment.
 
 ## Prerequisites
 
@@ -26,18 +26,18 @@ Review the filesystem, SMART devices, sensor exclusions, systemd service pattern
 - NVIDIA GPU and NVIDIA Container Toolkit
 - HTTPS access to the Hub and a registration for this system in the Hub
 
-## Komodo
+## Arcane Git Sync
 
-Select the target server and the Repo containing this definition. For a server named `host-01`, use the Stack name `beszel-agent-host-01` and the run directory `compose/beszel-agent-nvidia`. Set Project Name to `beszel-agent-nvidia` to match the Compose project and supply `BESZEL_HUB_URL` and `BESZEL_AGENT_KEY` in the Stack environment. After deploying, check that GPU, filesystem, and Docker metrics are updating in the Hub.
+Create a [Pull sync](https://getarcane.app/docs/docker/git-sync#create-a-git-synced-project) on the Agent that has the NVIDIA devices. Use `beszel-agent-nvidia` as the sync and Compose project name and `stacks/beszel-agent-nvidia/compose.yaml` as the Compose File Path. Set the variables from `.env.example` in the sync environment. Turn off the previous controller's automatic deployment for this project before saving. After deploying, check that GPU, filesystem, SMART, and Docker metrics continue to update in the Hub.
 
-Register the host with **Add System** in Beszel. On the target host, store its token as one line in the file identified by `secrets.beszel_agent_token.file` in [`compose.yaml`](compose.yaml). Use mode `600` and keep the file outside Git. The agent reads the mounted secret through `TOKEN_FILE` in both Komodo and manual deployments.
+Reuse the existing Hub registration and set `BESZEL_AGENT_TOKEN_PATH` to the current token file on the host. For a new agent, register it with **Add System** and store the token in a private file with mode `0600`. The agent reads the mounted secret through `TOKEN_FILE`.
 
 ## Manual deployment
 
 ```bash
-cd compose/beszel-agent-nvidia
+cd stacks/beszel-agent-nvidia
 cp .env.example .env
-# Set BESZEL_HUB_URL and BESZEL_AGENT_KEY in .env, then prepare the token and extra filesystem directory described above.
+# Set the host values in .env and prepare the token and extra filesystem directory.
 docker compose up -d
 ```
 
@@ -49,6 +49,7 @@ Required variables are documented in `.env.example`.
 | --- | --- |
 | `BESZEL_HUB_URL` | Remote Hub URL for the outbound WebSocket connection |
 | `BESZEL_AGENT_KEY` | Public key from the "Add System" dialog |
+| `BESZEL_AGENT_TOKEN_PATH` | Absolute path to the private token file on the target host |
 
 For manual deployments, supply these values in a local `.env` beside the Compose file.
 
@@ -84,7 +85,7 @@ docker compose down
 Validate the stack file:
 
 ```bash
-BESZEL_HUB_URL=https://beszel.example.com BESZEL_AGENT_KEY=placeholder docker compose config -q
+BESZEL_AGENT_KEY=placeholder docker compose --env-file .env.example config --quiet
 ```
 
 Check agent health:

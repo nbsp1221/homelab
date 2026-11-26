@@ -6,7 +6,7 @@ from homelab_infra.dns import dns_probe_names
 
 def build_monitoring_verification(definition: dict) -> str:
     stacks = definition["stacks"]
-    if not {"caddy-gcp", "beszel-hub"} <= stacks.keys():
+    if "caddy-gcp" not in stacks:
         return ""
     environment = stacks["caddy-gcp"]["env"]
     domain = dns_probe_names((environment["CADDY_DOMAIN"],))[0]

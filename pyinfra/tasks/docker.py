@@ -84,7 +84,7 @@ def install() -> None:
         src=f"{repository}/gpg",
         dest=DOCKER_KEY_PATH,
         mode="0644",
-        force=True,
+        force=not set(DOCKER_PACKAGES).issubset(installed),
         extra_curl_args={"--max-time": "30"},
     )
     apt.sources_file(

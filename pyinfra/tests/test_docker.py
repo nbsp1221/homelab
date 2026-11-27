@@ -77,6 +77,7 @@ def test_install_uses_the_official_apt_source_without_package_removals(
     assert source_args["architectures"] == [architecture]
     assert source_args["signed_by"] == download.call_args.kwargs["dest"]
     assert download.call_args.kwargs["src"] == f"{source_args['uris'][0]}/gpg"
+    assert download.call_args.kwargs["force"] is True
     for operation in packages.call_args_list:
         assert operation.kwargs["extra_install_args"] == "--no-remove"
         assert not operation.kwargs.get("latest")
@@ -107,3 +108,35 @@ def test_install_rejects_distribution_compose_before_any_apt_operation(monkeypat
 
     packages.assert_not_called()
     download.assert_not_called()
+
+
+@pytest.mark.parametrize("missing_compose", [False, True])
+def test_reapply_downloads_the_key_only_when_needed(monkeypatch, missing_compose):
+    installed = {
+        package: ["1"]
+        for package in (*docker.DOCKER_PACKAGES, *docker.DOCKER_PREREQUISITES)
+    }
+    if missing_compose:
+        del installed["docker-compose-plugin"]
+    facts = {
+        docker.LinuxDistribution: {
+            "name": "Ubuntu",
+            "release_meta": {"UBUNTU_CODENAME": "resolute"},
+        },
+        docker.DebArch: "amd64",
+        docker.DebPackages: installed,
+    }
+    monkeypatch.setattr(
+        docker, "host", SimpleNamespace(data={}, get_fact=facts.__getitem__)
+    )
+    packages, download = Mock(), Mock()
+    monkeypatch.setattr(docker.apt, "packages", packages)
+    monkeypatch.setattr(docker.apt, "sources_file", Mock())
+    monkeypatch.setattr(docker.files, "directory", Mock())
+    monkeypatch.setattr(docker.files, "download", download)
+    monkeypatch.setattr(docker.systemd, "service", Mock())
+
+    docker.install._inner()
+
+    assert packages.call_count == 1
+    assert download.call_args.kwargs["force"] is missing_compose

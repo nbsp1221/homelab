@@ -17,15 +17,17 @@ On the GCP host, copy `compose.yaml`, `.env.example` and `config/Caddyfile` into
 Run these commands from the deployment directory. Start Caddy before [Beszel Hub](../../stacks/beszel-hub/README.md) so their shared Docker network exists.
 
 ```sh
-docker compose config --quiet
-docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile
-docker compose up -d --wait --wait-timeout 120
+docker compose config --quiet &&
+  docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile &&
+  docker compose up -d --wait --wait-timeout 120
 ```
 
-When applying a Caddyfile change to a running container, validate it using the command above, then reload Caddy.
+For a Caddyfile-only change on a running container, validate and reload in one step.
 
 ```sh
-docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+docker compose config --quiet &&
+  docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile &&
+  docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
 For recovery, inspect `docker compose ps --all` and `docker compose logs caddy`. Restore the previous configuration files if needed and reapply from the same directory with the original project name, private `.env`, and named volumes.
@@ -38,6 +40,19 @@ From a Tailscale-connected client, check both address families with certificate 
 curl --noproxy '*' -4 --fail https://beszel.example.com/api/health
 curl --noproxy '*' -6 --fail https://beszel.example.com/api/health
 curl --noproxy '*' --fail https://beszel.example.com/healthz
+```
+
+To check the configured listeners directly, use the domain and both listener addresses from the host's `.env`. The example addresses below are placeholders. `--resolve` sends each request to the specified address while keeping the hostname for TLS certificate verification.
+
+```bash
+domain=beszel.example.com
+ipv4=192.0.2.10
+ipv6=2001:db8::10
+
+curl --noproxy '*' --fail-early --fail --silent --show-error --write-out '\n' \
+  --resolve "$domain:443:$ipv4" "https://$domain/healthz" "https://$domain/api/health" &&
+curl --noproxy '*' --fail-early --fail --silent --show-error --write-out '\n' \
+  --resolve "$domain:443:[$ipv6]" "https://$domain/healthz" "https://$domain/api/health"
 ```
 
 The Hub health endpoint must return HTTP 200, and `/healthz` must return `gcp-caddy-ok`. Open the root URL to reach the Beszel UI.

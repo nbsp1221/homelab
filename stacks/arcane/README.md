@@ -8,13 +8,18 @@ Copy `compose.yaml` and `.env.example` to a deployment directory on the manageme
 
 Arcane joins the external `caddy-network` network. For HTTPS, attach Caddy to that network, forward the site to `arcane:3552`, and set `ARCANE_APP_URL` in `.env` to the URL opened by users, such as `https://arcane.example.com`. Caddy forwards the WebSocket connections that Arcane uses for live updates. See the [Arcane reverse proxy guide](https://getarcane.app/docs/networking/reverse-proxy).
 
-Run the following from the deployment directory. The network command prepares the external network if the host's reverse proxy has yet to create it.
+On a host that runs this repository's [Caddy stack](../../compose/caddy-gcp/README.md#install-and-recover), install that stack first so its Compose project creates `caddy-network`. On a host where you manage the network separately, create it once if needed.
 
 ```sh
-docker compose config --quiet
 docker network inspect caddy-network >/dev/null 2>&1 || docker network create caddy-network
-docker compose pull
-docker compose up -d --wait --wait-timeout 120
+```
+
+Run from the Manager deployment directory.
+
+```sh
+docker compose config --quiet &&
+  docker compose pull &&
+  docker compose up -d --wait --wait-timeout 120
 ```
 
 Open the URL configured in `ARCANE_APP_URL`. For a local install using the default `http://localhost:3552`, forward the loopback port over SSH to access it from another machine.

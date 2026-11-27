@@ -11,9 +11,9 @@ In Manager, use **Agents → Add Agent** to generate a single-use enrollment tok
 Run from the deployment directory.
 
 ```sh
-docker compose config --quiet
-docker compose pull
-docker compose up -d --wait --wait-timeout 120
+docker compose config --quiet &&
+  docker compose pull &&
+  docker compose up -d --wait --wait-timeout 120
 ```
 
 Keep the host-local environment and token files on subsequent applies. The Agent stores the issued key in the named volume and reuses it on restart.

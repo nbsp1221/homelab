@@ -55,6 +55,7 @@ def test_install_uses_the_official_apt_source_without_package_removals(
     facts = {
         docker.LinuxDistribution: {"name": distribution, "release_meta": release_meta},
         docker.DebArch: architecture,
+        docker.DebPackages: {},
     }
     monkeypatch.setattr(
         docker, "host", SimpleNamespace(data={}, get_fact=facts.__getitem__)
@@ -83,3 +84,26 @@ def test_install_uses_the_official_apt_source_without_package_removals(
     assert set(prerequisites["packages"]) == {"ca-certificates", "curl"}
     assert "docker-compose-plugin" in install["packages"]
     assert install["update"] is True
+
+
+def test_install_rejects_distribution_compose_before_any_apt_operation(monkeypatch):
+    facts = {
+        docker.LinuxDistribution: {
+            "name": "Ubuntu",
+            "release_meta": {"UBUNTU_CODENAME": "noble"},
+        },
+        docker.DebArch: "amd64",
+        docker.DebPackages: {"docker-compose-v2": ["2.40.3"]},
+    }
+    monkeypatch.setattr(
+        docker, "host", SimpleNamespace(data={}, get_fact=facts.__getitem__)
+    )
+    packages, download = Mock(), Mock()
+    monkeypatch.setattr(docker.apt, "packages", packages)
+    monkeypatch.setattr(docker.files, "download", download)
+
+    with pytest.raises(docker.DeployError, match="manual removal: docker-compose-v2"):
+        docker.install._inner()
+
+    packages.assert_not_called()
+    download.assert_not_called()

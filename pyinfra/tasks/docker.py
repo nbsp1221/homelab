@@ -3,7 +3,7 @@ from shlex import join
 from pyinfra import host
 from pyinfra.api import deploy
 from pyinfra.api.exceptions import DeployError
-from pyinfra.facts.deb import DebArch
+from pyinfra.facts.deb import DebArch, DebPackages
 from pyinfra.facts.server import LinuxDistribution, Users
 from pyinfra.operations import apt, files, server, systemd
 
@@ -17,6 +17,19 @@ DOCKER_PACKAGES = (
 DOCKER_KEY_DIR = "/etc/apt/keyrings"
 DOCKER_KEY_PATH = f"{DOCKER_KEY_DIR}/docker.asc"
 APT_NO_REMOVE = "--no-remove"
+DOCKER_PREREQUISITES = ("ca-certificates", "curl")
+DOCKER_CONFLICTING_PACKAGES = frozenset(
+    {
+        "containerd",
+        "docker-buildx",
+        "docker-compose",
+        "docker-compose-v2",
+        "docker-doc",
+        "docker.io",
+        "podman-docker",
+        "runc",
+    }
+)
 APT_REFRESH = "apt-get -o APT::Update::Error-Mode=any update"
 
 
@@ -37,6 +50,14 @@ def install() -> None:
             "Could not determine distribution release or APT architecture"
         )
 
+    installed = host.get_fact(DebPackages)
+    conflicts = sorted(DOCKER_CONFLICTING_PACKAGES.intersection(installed))
+    if conflicts:
+        raise DeployError(
+            "Conflicting Docker packages require manual removal: "
+            + ", ".join(conflicts)
+        )
+
     operators = tuple(host.data.get("docker_users", ()))
     if operators:
         missing = sorted(set(operators) - set(host.get_fact(Users)))
@@ -46,13 +67,13 @@ def install() -> None:
             )
 
     repository = f"https://download.docker.com/linux/{name}"
-    apt.packages(
-        name="Install Docker repository prerequisites",
-        packages=["ca-certificates", "curl"],
-        update=True,
-        cache_time=3600,
-        extra_install_args=APT_NO_REMOVE,
-    )
+    if not set(DOCKER_PREREQUISITES).issubset(installed):
+        apt.packages(
+            name="Install Docker repository prerequisites",
+            packages=list(DOCKER_PREREQUISITES),
+            update=True,
+            extra_install_args=APT_NO_REMOVE,
+        )
     files.directory(
         name="Create APT keyring directory",
         path=DOCKER_KEY_DIR,
@@ -63,6 +84,8 @@ def install() -> None:
         src=f"{repository}/gpg",
         dest=DOCKER_KEY_PATH,
         mode="0644",
+        force=True,
+        extra_curl_args={"--max-time": "30"},
     )
     apt.sources_file(
         name="Configure Docker's official APT repository",

@@ -156,7 +156,7 @@ def apply() -> None:
         **ownership,
     )
     server.script(
-        name=f"Validate and apply {selected} with rollback on failure",
+        name=f"Validate and apply {selected}",
         src=str(APPLY_SCRIPT),
         args=(
             shlex.quote(target),

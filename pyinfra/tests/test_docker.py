@@ -1,12 +1,14 @@
 import os
 import subprocess
 from io import BytesIO
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
+from tasks import docker
 from tasks.docker import (
     build_upgrade_command,
-    docker_package_candidate_available,
     docker_repository,
     fetch_repository_key,
     installed_conflicts,
@@ -59,21 +61,6 @@ def test_docker_repository_mapping(
 def test_docker_repository_rejects_unsupported_distribution() -> None:
     with pytest.raises(ValueError, match="Debian and Ubuntu"):
         docker_repository("Fedora", "42", "x86_64")
-
-
-@pytest.mark.parametrize(
-    ("policy", "expected"),
-    [
-        ("docker-ce:\n  Candidate: 5:29.0.0-1~debian.12~bookworm\n", True),
-        ("docker-ce:\n  Candidate: (none)\n", False),
-        ("", False),
-    ],
-)
-def test_docker_package_candidate_availability(
-    policy: str,
-    expected: bool,
-) -> None:
-    assert docker_package_candidate_available(policy) is expected
 
 
 def test_repository_key_uses_docker_official_armored_format(monkeypatch) -> None:
@@ -135,3 +122,53 @@ def test_upgrade_targets_installed_unheld_packages(tmp_path):
         "--only-upgrade",
         "docker-ce-cli",
     ]
+
+
+@pytest.mark.parametrize(
+    ("missing", "expected"),
+    [
+        (
+            {"ca-certificates", "docker-ce"},
+            ["ca", "key", "sources", "refresh", "install"],
+        ),
+        ({"docker-compose-plugin"}, ["key", "sources", "refresh", "install"]),
+        (set(), ["key", "sources", "install"]),
+    ],
+)
+def test_install_plans_prerequisites_and_refresh_for_missing_packages(
+    monkeypatch, missing, expected
+):
+    records = []
+    present = set(docker.DOCKER_PACKAGES) | {"ca-certificates"}
+
+    def get_fact(fact):
+        return {
+            docker.DebPackages: present - missing,
+            docker.LinuxDistribution: {
+                "name": "Debian",
+                "release_meta": {
+                    "VERSION_CODENAME": "bookworm",
+                },
+            },
+            docker.Arch: "x86_64",
+        }[fact]
+
+    def record(label):
+        def operation(**kwargs):
+            records.append(label)
+            return SimpleNamespace(will_change=False)
+
+        return operation
+
+    def packages(*, packages, **kwargs):
+        records.append("ca" if packages == ["ca-certificates"] else "install")
+
+    monkeypatch.setattr(docker, "host", SimpleNamespace(data={}, get_fact=get_fact))
+    monkeypatch.setattr(docker, "fetch_repository_key", lambda _: BytesIO(b"fixture"))
+    monkeypatch.setattr(docker.files, "put", record("key"))
+    monkeypatch.setattr(docker.apt, "sources_file", record("sources"))
+    monkeypatch.setattr(docker.server, "shell", record("refresh"))
+    monkeypatch.setattr(docker.apt, "packages", packages)
+    monkeypatch.setattr(docker.systemd, "service", Mock())
+    docker.install._inner()
+    assert records == expected

@@ -3,16 +3,36 @@ set -eu
 umask 077
 
 target=$1 stage=$2 requires_env=$3 caddy=$4
-backup=$stage/previous
-promoted=false had_project=false running='' env_changed=false
+env_changed=false
+
+# Use one Compose input path for validation, apply, and reload.
+compose_with_env() (
+    file=$1 env_file=$2
+    shift 2
+    if [ ! -f "$env_file" ]; then
+        env_file=/dev/null
+    fi
+    keys=$(awk '
+        $0 == "# BEGIN HOMELAB HOST VALUES" { managed = 1; next }
+        $0 == "# END HOMELAB HOST VALUES" { managed = 0; next }
+        managed && match($0, /^[A-Z_][A-Z0-9_]*=/) { print substr($0, 1, RLENGTH - 1) }
+    ' "$env_file")
+    for key in $keys; do
+        unset "$key"
+    done
+    if [ -n "$override" ]; then
+        set -- -f "$override" "$@"
+    fi
+    docker compose --project-directory "$target" --env-file "$env_file" \
+        -f "$file" "$@"
+)
 
 active() {
-    docker compose --project-directory "$target" -f "$target/compose.yaml" "$@"
+    compose_with_env "$target/compose.yaml" "$target/.env" "$@"
 }
 
 candidate() {
-    docker compose --project-directory "$stage" --env-file "$stage/.env" \
-        -f "$stage/compose.yaml" "$@"
+    compose_with_env "$stage/compose.yaml" "$stage/.env" "$@"
 }
 
 reload_caddy() {
@@ -26,50 +46,6 @@ reload_caddy() {
     return 1
 }
 
-save_file() {
-    if [ -e "$target/$1" ] || [ -L "$target/$1" ]; then
-        cp -a -- "$target/$1" "$backup/$2"
-    fi
-}
-
-restore_file() {
-    if [ -e "$backup/$2" ] || [ -L "$backup/$2" ]; then
-        cp -a -- "$backup/$2" "$stage/restore-$2" &&
-            mv -fT -- "$stage/restore-$2" "$target/$1"
-    else
-        rm -f -- "$target/$1"
-    fi
-}
-
-finish() {
-    status=$?
-    trap - EXIT HUP INT TERM
-    if [ "$status" -ne 0 ] && [ "$promoted" = true ]; then
-        recovered=true
-        # An initially stopped project must not stay running after a failed apply.
-        if [ -z "$running" ] && [ "$apply_started" = true ]; then
-            active stop || recovered=false
-        fi
-        restore_file compose.yaml compose || recovered=false
-        if [ "$caddy" = yes ]; then
-            restore_file config/Caddyfile caddy || recovered=false
-        fi
-        if [ "$env_changed" = true ]; then
-            restore_file .env env || recovered=false
-        fi
-        if [ "$recovered" = true ] && [ "$had_project" = true ] && [ -n "$running" ]; then
-            { active up -d --wait --wait-timeout 120 && reload_caddy; } || recovered=false
-        fi
-        if [ "$recovered" = false ]; then
-            printf 'Compose rollback failed. Inspect recovery files in %s\n' "$stage" >&2
-            exit "$status"
-        fi
-        printf 'Compose apply failed. Previous files and running state restored.\n' >&2
-    fi
-    rm -rf -- "$stage"
-    exit "$status"
-}
-
 # Each run uploads into a private directory before acquiring the project lock.
 # Validate its shape before registering cleanup.
 case "$stage" in
@@ -77,8 +53,7 @@ case "$stage" in
     *) exit 1 ;;
 esac
 test -d "$stage"
-apply_started=false
-trap finish EXIT
+trap 'rm -rf -- "$stage"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -87,6 +62,14 @@ if ! flock -n 9; then
     printf 'Another Compose deploy is already running for %s\n' "$target" >&2
     exit 1
 fi
+
+override=
+for filename in compose.override.yml compose.override.yaml docker-compose.override.yml docker-compose.override.yaml; do
+    if [ -f "$target/$filename" ]; then
+        override=$target/$filename
+        break
+    fi
+done
 
 env_source=/dev/null
 if [ -e "$target/.env" ] || [ -L "$target/.env" ]; then
@@ -135,26 +118,42 @@ elif [ "$env_source" != /dev/null ] || [ -s "$stage/.env" ]; then
 fi
 chmod 600 "$stage/.env"
 
-if [ -f "$target/compose.yaml" ]; then
-    had_project=true
-    running=$(active ps --status running --quiet)
-fi
-candidate config --quiet
+# Ask Compose for the effective project after interpolation and overrides. Inspect
+# Docker directly so a missing previous environment cannot block an initial seed.
+model=$(candidate config --format json)
+project=$(printf '%s\n' "$model" |
+    sed -n 's/^  "name": "\([a-z0-9][a-z0-9_-]*\)",\{0,1\}$/\1/p')
+unset model
+case "$project" in
+    ""|[!a-z0-9]*|*[!a-z0-9_-]*)
+        printf 'Could not identify the validated Compose project.\n' >&2
+        exit 1
+        ;;
+esac
+canonical_target=$(realpath -e -- "$target")
+containers=$(docker ps -a --filter "label=com.docker.compose.project=$project" \
+    --format '{{.ID}}|{{.Label "com.docker.compose.project.working_dir"}}|{{.Label "com.docker.compose.oneoff"}}')
+while IFS='|' read -r id directory oneoff; do
+    [ -n "$id" ] || continue
+    case "$oneoff" in True|true) continue ;; esac
+    if [ "$directory" != "$target" ] &&
+        [ "$(realpath -e -- "$directory" 2>/dev/null || :)" != "$canonical_target" ]; then
+        printf 'Compose project %s is already managed from another directory.\n' "$project" >&2
+        exit 1
+    fi
+done <<EOF
+$containers
+EOF
 if [ "$caddy" = yes ]; then
-    candidate run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile
-    mkdir -p -- "$target/config"
+    candidate run --rm --no-deps --volume "$stage/config:/etc/caddy:ro" \
+        caddy caddy validate --config /etc/caddy/Caddyfile
+    test ! -L "$target/config"
+    if [ ! -d "$target/config" ]; then
+        install -d -m 0700 -o "$(stat -c %u -- "$target")" \
+            -g "$(stat -c %g -- "$target")" -- "$target/config"
+    fi
 fi
 
-mkdir -- "$backup"
-save_file compose.yaml compose
-if [ "$caddy" = yes ]; then
-    save_file config/Caddyfile caddy
-fi
-if [ "$env_changed" = true ]; then
-    save_file .env env
-fi
-
-promoted=true
 if [ "$env_changed" = true ]; then
     mv -fT -- "$stage/.env" "$target/.env"
 fi
@@ -162,6 +161,7 @@ if [ "$caddy" = yes ]; then
     mv -fT -- "$stage/config/Caddyfile" "$target/config/Caddyfile"
 fi
 mv -fT -- "$stage/compose.yaml" "$target/compose.yaml"
-apply_started=true
-active up -d --wait --wait-timeout 120
-reload_caddy
+if ! active up -d --wait --wait-timeout 120 || ! reload_caddy; then
+    printf 'Compose apply failed after updating %s. Inspect the project before retrying.\n' "$target" >&2
+    exit 1
+fi

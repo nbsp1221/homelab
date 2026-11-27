@@ -8,7 +8,7 @@ from pyinfra import host
 from pyinfra.api import deploy
 from pyinfra.api.exceptions import DeployError
 from pyinfra.facts.deb import DebPackages
-from pyinfra.facts.server import Arch, Command, LinuxDistribution, Users
+from pyinfra.facts.server import Arch, LinuxDistribution, Users
 from pyinfra.operations import apt, files, server, systemd
 
 DOCKER_PACKAGES = (
@@ -20,9 +20,6 @@ DOCKER_PACKAGES = (
 )
 APT_REFRESH = "apt-get -o APT::Update::Error-Mode=any update"
 DOCKER_KEY_PATH = "/etc/apt/keyrings/docker.asc"
-DOCKER_PACKAGE_POLICY_COMMAND = (
-    "LC_ALL=C apt-cache policy docker-ce 2>/dev/null || true"
-)
 DOCKER_CONFLICTING_PACKAGES = frozenset(
     {
         "containerd",
@@ -77,14 +74,6 @@ def fetch_repository_key(url: str) -> BytesIO:
     return BytesIO(content)
 
 
-def docker_package_candidate_available(policy: str) -> bool:
-    for line in policy.splitlines():
-        field, separator, value = line.strip().partition(":")
-        if separator and field == "Candidate":
-            return value.strip() != "(none)"
-    return False
-
-
 @deploy("Configure Docker Engine")
 def install() -> None:
     installed_packages = host.get_fact(DebPackages)
@@ -123,6 +112,14 @@ def install() -> None:
     except (OSError, ValueError) as error:
         raise DeployError(f"Could not fetch Docker signing key: {error}") from error
 
+    if "ca-certificates" not in installed_packages:
+        apt.packages(
+            name="Install CA certificates for the Docker repository",
+            packages=["ca-certificates"],
+            update=True,
+            cache_time=3600,
+        )
+
     key_result = files.put(
         name="Install Docker's APT signing key",
         src=signing_key,
@@ -138,11 +135,10 @@ def install() -> None:
         architectures=[repository.architecture],
         signed_by=DOCKER_KEY_PATH,
     )
-    package_policy = host.get_fact(Command, command=DOCKER_PACKAGE_POLICY_COMMAND)
     if (
         key_result.will_change
         or repository_result.will_change
-        or not docker_package_candidate_available(package_policy)
+        or not set(DOCKER_PACKAGES).issubset(installed_packages)
     ):
         server.shell(name="Refresh Docker repository metadata", commands=APT_REFRESH)
 

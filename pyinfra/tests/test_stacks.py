@@ -1,4 +1,5 @@
 import fcntl
+import json
 import os
 import shutil
 import subprocess
@@ -18,36 +19,58 @@ OLD_ENV = (
 )
 DOCKER = """\
 #!/usr/bin/env python3
+import json
 import os
 import sys
 from pathlib import Path
 
-args = sys.argv
-path = Path(args[args.index("-f") + 1])
-version = path.read_text().strip()
-operation = args[args.index("-f") + 2]
+args = sys.argv[1:]
 failure = os.environ["FAIL"]
 running = Path(os.environ["RUNNING"])
-if operation == "ps":
-    if running.exists():
-        print(running.read_text())
-elif operation in ("config", "run"):
+log = Path(os.environ["DOCKER_LOG"])
+if args[0] == "ps":
+    if running.exists() or os.environ["FOREIGN_DIRECTORY"]:
+        directory = os.environ["FOREIGN_DIRECTORY"] or os.environ["PROJECT_DIRECTORY"]
+        print(f"fixture-id|{directory}|False")
+    sys.exit(0)
+assert args.pop(0) == "compose"
+files = []
+while args[0] in ("-f", "--env-file", "--project-directory"):
+    option, value = args[:2]
+    args = args[2:]
+    if option == "-f":
+        files.append(value)
+    elif option == "--env-file":
+        env_file = value
+    else:
+        project = value
+path = Path(files[0])
+version = path.read_text().strip()
+operation = args[0]
+with log.open("a") as stream:
+    stream.write(json.dumps({
+        "operation": operation,
+        "files": files,
+        "project": project,
+        "env_file": env_file,
+        "value": os.getenv("VALUE"),
+    }) + "\\n")
+if operation == "config":
     assert path.parent.name.startswith(".deploy-")
-    assert "--env-file" in args
-    if operation == "run":
-        assert (path.parent / "config/Caddyfile").read_text() == "new config"
-    sys.exit(failure == operation)
+    assert "--format" in args
+    if failure == "config":
+        sys.exit(1)
+    print(json.dumps({"name": "example-project"}, indent=2))
+elif operation == "run":
+    assert (path.parent / "config/Caddyfile").read_text() == "new config"
+    assert args[args.index("--volume") + 1] == f"{path.parent}/config:/etc/caddy:ro"
+    sys.exit(failure == "run")
 elif operation == "up":
     assert "--wait" in args
     running.write_text(version)
-    if version == "new" and failure in ("up", "rollback"):
-        sys.exit(1)
-    if version == "old" and failure == "rollback":
-        sys.exit(1)
+    sys.exit(failure == "up")
 elif operation == "exec":
-    sys.exit(failure == "exec" and version == "new")
-elif operation == "stop":
-    running.unlink(missing_ok=True)
+    sys.exit(failure == "exec")
 else:
     sys.exit(99)
 """
@@ -78,7 +101,7 @@ def stack_case(tmp_path):
     return project, stage, running, tools
 
 
-def apply(stack_case, *, fail="", caddy="yes"):
+def apply(stack_case, *, fail="", caddy="yes", foreign_directory="", value=""):
     project, stage, running, tools = stack_case
     return subprocess.run(
         ["sh", str(SCRIPT), str(project), str(stage), "yes", caddy],
@@ -89,15 +112,24 @@ def apply(stack_case, *, fail="", caddy="yes"):
             **os.environ,
             "PATH": f"{tools}:{os.environ['PATH']}",
             "RUNNING": str(running),
+            "DOCKER_LOG": str(project.parent / "docker.log"),
             "FAIL": fail,
+            "PROJECT_DIRECTORY": str(project),
+            "FOREIGN_DIRECTORY": str(foreign_directory),
+            "VALUE": value,
         },
     )
 
 
-@pytest.mark.parametrize("failure", ["config", "run", "up", "exec"])
-def test_failure_preserves_previous_project_files_and_running_state(
-    stack_case, failure
-):
+def invocations(project):
+    return [
+        json.loads(line)
+        for line in (project.parent / "docker.log").read_text().splitlines()
+    ]
+
+
+@pytest.mark.parametrize("failure", ["config", "run"])
+def test_validation_failure_leaves_active_files_and_running_state(stack_case, failure):
     project, stage, running, _ = stack_case
     result = apply(stack_case, fail=failure)
     assert result.returncode != 0
@@ -106,35 +138,32 @@ def test_failure_preserves_previous_project_files_and_running_state(
     assert (project / ".env").read_text() == OLD_ENV
     assert running.read_text() == "old"
     assert not stage.exists()
-    if failure in ("up", "exec"):
-        assert "Previous files and running state restored" in result.stderr
 
 
-@pytest.mark.parametrize("has_previous_manifest", [False, True])
-def test_failed_apply_keeps_initially_stopped_project_stopped(
-    stack_case, has_previous_manifest
-):
+@pytest.mark.parametrize("failure", ["up", "exec"])
+def test_failure_after_promotion_reports_failure_for_operator(stack_case, failure):
     project, stage, running, _ = stack_case
-    if not has_previous_manifest:
-        (project / "compose.yaml").unlink()
-    running.unlink()
-    result = apply(stack_case, fail="up", caddy="no")
+    result = apply(stack_case, fail=failure)
     assert result.returncode != 0
-    assert (project / "compose.yaml").exists() is has_previous_manifest
-    assert (project / ".env").read_text() == OLD_ENV
-    assert not running.exists()
+    assert "Inspect the project before retrying" in result.stderr
+    assert (project / "compose.yaml").read_text() == "new"
+    assert running.read_text() == "new"
     assert not stage.exists()
+    assert [run["operation"] for run in invocations(project)].count("up") == 1
 
 
-def test_failed_rollback_retains_recovery_directory(stack_case):
-    project, stage, _, _ = stack_case
-    result = apply(stack_case, fail="rollback")
+def test_same_project_in_another_directory_is_left_running(stack_case):
+    project, stage, running, _ = stack_case
+    (project / "compose.yaml").unlink()
+    other = project.parent / "foreign"
+    other.mkdir()
+    result = apply(stack_case, foreign_directory=other)
     assert result.returncode != 0
-    assert "Compose rollback failed" in result.stderr
-    assert str(stage) in result.stderr
-    assert stage.exists()
-    assert (project / "compose.yaml").read_text() == "old"
-    assert (stage / "previous/compose").read_text() == "old"
+    assert "already managed from another directory" in result.stderr
+    assert not (project / "compose.yaml").exists()
+    assert running.read_text() == "old"
+    assert [run["operation"] for run in invocations(project)] == ["config"]
+    assert not stage.exists()
 
 
 def test_busy_lock_prevents_concurrent_promotion(stack_case):
@@ -162,7 +191,7 @@ def test_success_clears_managed_block_and_preserves_secrets(stack_case):
 
 
 @pytest.mark.parametrize("existing", [False, True])
-def test_bootstrap_environment_seed_is_used_only_if_missing(stack_case, existing):
+def test_bootstrap_environment_seed_with_existing_manifest(stack_case, existing):
     project, stage, _, _ = stack_case
     if not existing:
         (project / ".env").unlink()
@@ -172,6 +201,34 @@ def test_bootstrap_environment_seed_is_used_only_if_missing(stack_case, existing
     assert (project / ".env").read_text() == (
         "SECRET=fixture\n" if existing else "SECRET=seed\n"
     )
+
+
+def test_apply_and_validation_share_local_override_and_managed_values(stack_case):
+    project, stage, _, _ = stack_case
+    override = project / "compose.override.yaml"
+    override.touch()
+    (stage / "managed.env").write_text(
+        '# BEGIN HOMELAB HOST VALUES\nVALUE="inventory"\n# END HOMELAB HOST VALUES\n'
+    )
+    result = apply(stack_case, caddy="no", value="inherited")
+    assert result.returncode == 0, result.stderr
+    candidate, active = invocations(project)
+    assert candidate["files"] == [str(stage / "compose.yaml"), str(override)]
+    assert active["files"] == [str(project / "compose.yaml"), str(override)]
+    assert candidate["project"] == active["project"] == str(project)
+    assert (candidate["value"], active["value"]) == (None, None)
+    assert 'VALUE="inventory"' in (project / ".env").read_text()
+
+
+def test_fresh_caddy_config_directory_belongs_to_project_owner(stack_case):
+    project, _, _, _ = stack_case
+    shutil.rmtree(project / "config")
+    result = apply(stack_case)
+    assert result.returncode == 0, result.stderr
+    config = (project / "config").stat()
+    owner = project.stat()
+    assert (config.st_uid, config.st_gid) == (owner.st_uid, owner.st_gid)
+    assert config.st_mode & 0o777 == 0o700
 
 
 def test_managed_environment_round_trips_through_compose(tmp_path):

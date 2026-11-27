@@ -74,10 +74,6 @@ jobs:
           uv run python -m compileall -q
           deploy.py group_data inventories tasks tests
 
-      - name: Check shell syntax
-        working-directory: pyinfra
-        run: sh -n files/apply_stack.sh
-
       - name: Validate inventory
         working-directory: pyinfra
         run: |

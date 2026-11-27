@@ -6,4 +6,4 @@ Use [example.json](example.json) as a template and replace its sample stack path
 
 For a stack with a local build context or other repository-relative files, set `"syncDirectory": true` in its sync entry. For example, [Bifrost](../../stacks/bifrost/) needs its Dockerfile and patches copied with the Compose file.
 
-Keep credentials and service environment files outside Git. Bootstrap or recover [Arcane Manager](../../stacks/arcane/README.md#bootstrap-with-pyinfra) and [Arcane Agent](../../stacks/arcane-agent/README.md#bootstrap-with-pyinfra) through pyinfra.
+Keep credentials and service environment files outside Git. Bootstrap or recover [Arcane Manager](../../stacks/arcane/README.md#install) and [Arcane Agent](../../stacks/arcane-agent/README.md#install) through Docker Compose on their hosts.

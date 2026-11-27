@@ -4,26 +4,31 @@ This stack provides an HTTPS reverse proxy for [Beszel Hub](../../stacks/beszel-
 
 ## Configuration and state
 
-The controller's private `gcp_ingress.py` group data supplies `CADDY_DOMAIN` and the host's Tailscale IPv4 and IPv6 addresses through `CADDY_BIND_IPV4` and `CADDY_BIND_IPV6`. Only TCP 443 is published, bound to those addresses. Caddy obtains certificates via Cloudflare DNS-01. Set `CLOUDFLARE_API_TOKEN` in the deployed stack's local `.env` with Zone:Read and DNS:Edit permissions for the relevant zone. Keep the token outside Git.
+Set `CADDY_DOMAIN` and the host's Tailscale IPv4 and IPv6 addresses in the deployment directory's private `.env` using `CADDY_BIND_IPV4` and `CADDY_BIND_IPV6`. Only TCP 443 is published, bound to those addresses. Caddy obtains certificates via Cloudflare DNS-01. Set `CLOUDFLARE_API_TOKEN` in the deployed stack's local `.env` with Zone:Read and DNS:Edit permissions for the relevant zone. Keep the token outside Git.
 
 The project uses the [Cloudflare module maintainers' prebuilt image](https://github.com/caddy-dns/cloudflare/pkgs/container/cloudflare), `ghcr.io/caddy-dns/cloudflare:v0.2.4`, pinned by digest. This image contains Caddy `2.11.2`; the tag refers to the Cloudflare module version. Deployments pull the image without compiling Caddy.
 
 Named volumes preserve certificate and ACME state under `/data` and Caddy runtime state under `/config`. The project creates `caddy-network`, which the Hub also joins. Hub port 8090 is reachable over this Docker network without being published on the host. The proxy configuration follows [Beszel's Caddy guidance](https://beszel.dev/guide/reverse-proxy), including WebSocket support and the upstream timeout.
 
-## Deploy from the controller
+## Install and recover
 
-Run from `pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file.
+On the GCP host, copy `compose.yaml`, `.env.example` and `config/Caddyfile` into the stack's deployment directory. Reuse `/opt/stacks/caddy-gcp/` if the stack already runs there. For a fresh deployment, use a directory owned by the Docker-enabled operator, such as `~/compose/caddy-gcp/`, and set its mode to `0700`. Create `.env` from the example on first install and set its mode to `0600`. Preserve the existing `.env` when applying updates, including any values previously supplied through pyinfra.
 
-Preview and apply the Caddy stack. Replace `gcp-01` with your host's inventory name.
+Run these commands from the deployment directory. Start Caddy before [Beszel Hub](../../stacks/beszel-hub/README.md) so their shared Docker network exists.
 
-```bash
-uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.stacks.apply \
-  --limit gcp-01 --data stack=caddy-gcp --dry --serial
-uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.stacks.apply \
-  --limit gcp-01 --data stack=caddy-gcp --serial --yes
+```sh
+docker compose config --quiet
+docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile
+docker compose up -d --wait --wait-timeout 120
 ```
 
-Deploy `caddy-gcp` before [`beszel-hub`](../../stacks/beszel-hub/README.md) so their shared Docker network exists. The executor validates the staged Compose and Caddy files, applies the project while preserving its volumes, then runs [Caddy's standard reload command](https://caddyserver.com/docs/running#docker-compose).
+When applying a Caddyfile change to a running container, validate it using the command above, then reload Caddy.
+
+```sh
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+```
+
+For recovery, inspect `docker compose ps --all` and `docker compose logs caddy`. Restore the previous configuration files if needed and reapply from the same directory with the original project name, private `.env`, and named volumes.
 
 ## Verify
 

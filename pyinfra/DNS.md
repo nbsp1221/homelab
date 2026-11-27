@@ -16,7 +16,7 @@ The migration briefly stops Tailscale. **Run it through an independent GCP IAP S
 
 Configure the IAP alias and Google credentials on the controller. Add the independently verified host key to the alias's `UserKnownHostsFile` under its configured `HostName`. Paramiko checks the effective hostname. An OpenSSH `HostKeyAlias` entry alone does not supply that mapping. Include the original cloud, public, and private DNS probes in the controller's private `gcp.py` group data.
 
-The target must already have enabled Tailscale and systemd-resolved services, the resolver files, `busctl`, `getent`, `resolvectl`, `timeout`, and `tailscale wait`. This deploy does not install packages, enroll a node, upgrade Docker or apply application stacks.
+The target must already have enabled Tailscale and systemd-resolved services, the resolver files, `busctl`, `getent`, `resolvectl`, `timeout`, and `tailscale wait`. Install packages and enroll the node before running this procedure.
 
 ## Preview and apply
 
@@ -36,18 +36,16 @@ An error or handled termination signal triggers an attempt to restore both previ
 
 ## Verify and check convergence
 
-Run the independent read-only DNS and monitoring checks:
+Run the independent read-only DNS check.
 
 ```bash
 uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.dns.verify_dns \
   --limit gcp-01 --serial --yes
-uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.monitoring.verify \
-  --limit gcp-01 --serial --yes
 ```
 
-DNS verification requires the stub link, both enabled/running services and Tailscale link DNS. It queries every declared probe through `getent` and `resolvectl query --cache=no`, with bounded query timeouts. Monitoring verification checks the declared domain and both configured IPv4/IPv6 listeners with TLS certificate verification, the proxy's expected `/healthz` response, and Beszel's `/api/health` response. It does not create accounts or read credentials.
+DNS verification requires the stub link, both enabled/running services and Tailscale link DNS. It queries every declared probe through `getent` and `resolvectl query --cache=no`, with bounded query timeouts. Check the HTTPS endpoints separately using the [Caddy operating procedure](../compose/caddy-gcp/README.md#verify).
 
-Run `tasks.dns.configure_dns` again after a successful apply; it should plan zero operations and avoid another Tailscale restart. The baseline leaves DNS migration to this dedicated IAP procedure. `tasks.verification.verify` checks DNS for opted-in hosts, and `tasks.dns.verify_dns` checks only DNS.
+Run `tasks.dns.configure_dns` again after a successful apply; it should plan zero operations and avoid another Tailscale restart. The baseline leaves DNS migration to this dedicated IAP procedure.
 
 During an approved later reboot, confirm resolved/Tailscale remain healthy, the daemon selects `systemd-resolved` DNS mode, all three probe categories still resolve, and the dual-stack monitoring checks succeed. A current runtime check does not establish persistence through reboot.
 

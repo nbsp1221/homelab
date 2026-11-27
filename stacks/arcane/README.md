@@ -1,6 +1,6 @@
 # Arcane
 
-This project runs Arcane Manager on the management host using the [official Docker Compose installation](https://getarcane.app/docs/get-started/installation). Manager monitors and manages the local Docker engine through its socket. Run an [Arcane Agent](../arcane-agent/README.md) on each other Docker host when adding remote environments. Bootstrap and recover the Manager and Agents independently of Arcane using pyinfra or Docker Compose on their hosts.
+This project runs Arcane Manager on the management host using the [official Docker Compose installation](https://getarcane.app/docs/get-started/installation). Manager monitors and manages the local Docker engine through its socket. Run an [Arcane Agent](../arcane-agent/README.md) on each other Docker host when adding remote environments. Bootstrap and recover the Manager and Agents with Docker Compose on their hosts.
 
 ## Install
 
@@ -8,10 +8,11 @@ Copy `compose.yaml` and `.env.example` to a deployment directory on the manageme
 
 Arcane joins the external `caddy-network` network. For HTTPS, attach Caddy to that network, forward the site to `arcane:3552`, and set `ARCANE_APP_URL` in `.env` to the URL opened by users, such as `https://arcane.example.com`. Caddy forwards the WebSocket connections that Arcane uses for live updates. See the [Arcane reverse proxy guide](https://getarcane.app/docs/networking/reverse-proxy).
 
-Run the following from the deployment directory.
+Run the following from the deployment directory. The network command prepares the external network if the host's reverse proxy has yet to create it.
 
 ```sh
 docker compose config --quiet
+docker network inspect caddy-network >/dev/null 2>&1 || docker network create caddy-network
 docker compose pull
 docker compose up -d --wait --wait-timeout 120
 ```
@@ -28,27 +29,13 @@ Sign in as `arcane` and change the generated initial password when prompted. Rea
 docker compose cp arcane:/app/data/initial-admin-password - | tar -xO
 ```
 
-## Bootstrap with pyinfra
-
-Save the Manager assignment in a [private Python inventory](../../pyinfra/README.md#compose-stacks) on the management host.
-
-```python
-manager = [("@local", {"stacks": {"arcane": {"bootstrap": True}}})]
-```
-
-Prepare `~/compose/arcane/.env` with the settings above. Keep the existing encryption key when adopting a running Manager. Run this from `pyinfra/` on the management host.
-
-```sh
-uv run pyinfra "$HOME/.config/homelab/arcane-manager.py" tasks.stacks.apply \
-  --data _sudo=false \
-  --data stack=arcane --serial --yes
-```
-
 ## Verify
 
 Run `docker compose ps` and check that Manager is healthy. In Arcane, confirm the local environment is online, its container list includes an existing host container, and its Dashboard shows host CPU and memory. Compare the container list with `docker ps` on the deployment host.
 
 ## State and recovery
+
+Reapply from the same deployment directory with the original project name, `.env`, and named volume. Restore a lost encryption key from the backup before starting the Manager with its existing data.
 
 The `arcane_arcane-data` volume holds the Manager database, configuration, and default `/app/data/projects` directory. Arcane places each new Git-synced Compose project in this directory on the selected environment. See [where projects live](https://getarcane.app/docs/docker/projects#where-projects-live).
 

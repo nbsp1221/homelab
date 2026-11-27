@@ -41,7 +41,7 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 
 ## Infrastructure Automation
 
-The [pyinfra executor](pyinfra/README.md) runs from a controller with SSH access to the managed hosts. It manages the GCP and OCI Linux baseline, provides a Docker-only entrypoint for the mini server, and applies infrastructure stacks assigned in inventory. Run pyinfra explicitly for host changes and use Arcane Git Pull for application updates.
+Run [pyinfra](pyinfra/README.md) from a controller with SSH access to configure the GCP and OCI Linux baseline or install Docker on the mini server. Use the Compose procedures for [Caddy](compose/caddy-gcp/README.md), [Arcane Manager](stacks/arcane/README.md), and [Arcane Agent](stacks/arcane-agent/README.md). Use [Arcane Git Pull](arcane/syncs/README.md) for routine application updates.
 
 ## Testing
 

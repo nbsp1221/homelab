@@ -1,6 +1,6 @@
 # pyinfra
 
-This executor manages the baseline configuration and explicitly selected Compose stacks on managed Linux hosts. Run pyinfra from a controller with OpenSSH access to the targets over Tailscale. Managed hosts do not run an agent or require Python.
+This executor applies the selected configuration to managed Linux hosts. Run pyinfra from a controller with OpenSSH access to the targets over Tailscale. Managed hosts do not run an agent or require Python.
 
 ## Scope
 
@@ -10,10 +10,9 @@ This executor manages the baseline configuration and explicitly selected Compose
 - Install current Docker Engine and Docker Compose from Docker's official
   repository.
 - Manage the GCP host's systemd-resolved/Tailscale DNS integration through a dedicated, IAP-guarded deployment with local rollback and DNS verification.
-- Run operating-system package upgrades only when explicitly requested.
-- Bootstrap Arcane and apply explicitly assigned infrastructure stacks using inventory host data.
+- Run Docker upgrades and operating-system maintenance on explicit request.
 
-Cloud resources, Tailscale enrollment, firewalls, and secret generation are outside this executor. Initial stack provisioning can explicitly seed an operator-provided private environment file; normal deployments preserve host-local secrets. The OS baseline does not automatically deploy application stacks.
+Provision cloud resources, enroll Tailscale, and manage firewalls and secrets through their respective tools.
 
 ## Controller setup
 
@@ -55,22 +54,7 @@ Host gcp-01
 
 An SSH agent can supply the identity instead of an identity file. Verify the alias with both `ssh` and pyinfra's read-only `server.Hostname` fact. The inventory enforces strict host-key checking.
 
-Keep site-specific settings in a private group-data directory on the controller. Use the inventory's group names as filenames. `gcp.py` supplies DNS probes and optional Docker group members, `oci.py` and `mini.py` may supply their own Docker group members, and `gcp_ingress.py` supplies the Caddy domain and listener addresses. For example:
-
-```python
-# gcp_ingress.py
-stacks = {
-    "caddy-gcp": {
-        "env": {
-            "CADDY_DOMAIN": "monitor.example.net",
-            "CADDY_BIND_IPV4": "192.0.2.10",
-            "CADDY_BIND_IPV6": "2001:db8::10",
-        },
-    },
-}
-```
-
-Use `docker_users = ("operator",)` only for accounts that should have Docker daemon access. Docker group membership grants root-level privileges. The stack owner defaults to the authenticated account and its primary group. Set `stack_owner` in private host or group data to select another existing account. Bootstrap under a different owner requires sudo.
+Keep site-specific settings in a private group-data directory on the controller. Use the inventory's group names as filenames. For example, `gcp.py` supplies DNS probes, and `gcp.py`, `oci.py`, or `mini.py` can declare `docker_users = ("operator",)` for their group. Docker group membership grants root-level privileges.
 
 Replace `gcp-01` in the examples with the inventory alias. Supply the controller's private group-data directory when targeting operational settings:
 
@@ -94,12 +78,10 @@ uv run pyinfra --group-data "$group_data" inventories/cloud.py deploy.py \
   --limit gcp-01 --dry --diff --serial
 ```
 
-Apply and verify the baseline:
+Apply the baseline.
 
 ```bash
 uv run pyinfra --group-data "$group_data" inventories/cloud.py deploy.py \
-  --limit gcp-01 --serial --yes
-uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.verification.verify \
   --limit gcp-01 --serial --yes
 ```
 
@@ -112,7 +94,7 @@ uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.maintenance
   --limit gcp-01 --serial --yes
 ```
 
-GCP DNS changes are a separate [IAP-guarded procedure](DNS.md). The baseline applies prerequisites, swap, and Docker installation. DNS and monitoring checks remain independently runnable.
+GCP DNS changes are a separate [IAP-guarded procedure](DNS.md). The baseline applies prerequisites, swap, and Docker installation.
 
 ### Preview Docker on the mini server
 
@@ -125,24 +107,7 @@ uv run --locked pyinfra --group-data "$group_data" inventories/mini.py \
 
 On hosts with password-protected sudo, add `--data _sudo=false` to plan using unprivileged facts. Use this override only for a preview. The Docker install task configures the repository and service and ensures the package set is present. Use `tasks.docker.upgrade` to refresh metadata and upgrade installed, unheld Docker packages. General package maintenance can also upgrade Docker during an explicit OS upgrade. Docker install applies strict APT refresh behavior to its own invocation. A drop-in created by an earlier release remains under the operator's control.
 
-### Compose stacks
-
-Select the infrastructure project and host explicitly. Arcane owns routine application updates. The pyinfra task handles the Manager, Agent, and GCP Caddy.
-
-```bash
-uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.stacks.apply \
-  --limit gcp-01 --data stack=caddy-gcp --dry --serial
-uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.stacks.apply \
-  --limit gcp-01 --data stack=caddy-gcp --serial --yes
-```
-
-Bootstrap stacks use the stack owner's `~/compose/<project>`. See the [Manager](../stacks/arcane/README.md#bootstrap-with-pyinfra) and [Agent](../stacks/arcane-agent/README.md#bootstrap-with-pyinfra) procedures. For private assignments, pass the absolute path to a private Python inventory in place of `inventories/cloud.py`. Groups such as `gcp` or `oci` still pick up their matching defaults. Migrate prior `HOMELAB_HOSTS_DIR` entries by copying their `stacks` map into the associated host's inventory data. Keep SSH credentials outside Git.
-
-Each run stages its files with private permissions. A host-wide lock allows one pyinfra Compose apply at a time, including the Manager bootstrap without sudo. The task stops before replacing active files if a standard Compose override exists, a destination is a mount point or directory, or containers with the same project name belong to another directory. Move any intended override settings into the managed Compose configuration before retrying. The task still reads the host's `.env`.
-
-Caddy validates the staged configuration before file promotion. The task then waits up to 120 seconds for startup. If promotion, startup, or Caddy reload fails, it reports an error and leaves the files and containers as they were at the point of failure. Inspect the project with `docker compose ps --all` and `docker compose logs` from its directory. Fix the configuration or restore the previous inputs and run the task again. Keep the existing environment secrets and volumes during recovery.
-
-The task preserves host-local secrets and rewrites only its managed environment block, removing that block when the inventory values are cleared. A private `--data stack_env_file=/absolute/path/to/private.env` can provide the initial secret file if the target has none. Keep it at mode `0600` and omit `--diff` when passing it. Deploy [GCP Caddy](../compose/caddy-gcp/README.md) before adopting the [Beszel Hub](../stacks/beszel-hub/README.md). Use `tasks.monitoring.verify` to check both endpoints.
+Deploy and recover [Caddy](../compose/caddy-gcp/README.md), [Arcane Manager](../stacks/arcane/README.md), and [Arcane Agent](../stacks/arcane-agent/README.md) through their Docker Compose procedures. Use [Arcane Git Pull](../arcane/syncs/README.md) for routine application updates.
 
 ## Project layout
 

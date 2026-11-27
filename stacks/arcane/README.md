@@ -30,20 +30,17 @@ docker compose cp arcane:/app/data/initial-admin-password - | tar -xO
 
 ## Bootstrap with pyinfra
 
-To run pyinfra on the management host, put `@local/host.yaml` in a [private inventory directory](../../deploy/pyinfra/README.md#compose-stacks) and assign the Manager as a bootstrap stack.
+Save the Manager assignment in a [private Python inventory](../../pyinfra/README.md#compose-stacks) on the management host.
 
-```yaml
-provider: local
-stacks:
-  arcane:
-    bootstrap: true
+```python
+manager = [("@local", {"stacks": {"arcane": {"bootstrap": True}}})]
 ```
 
-Prepare `~/compose/arcane/.env` with the settings above. Keep the existing encryption key when adopting a running Manager. Run this from `deploy/pyinfra/` on the management host.
+Prepare `~/compose/arcane/.env` with the settings above. Keep the existing encryption key when adopting a running Manager. Run this from `pyinfra/` on the management host.
 
 ```sh
-HOMELAB_HOSTS_DIR="$HOME/.config/homelab/hosts" uv run pyinfra \
-  @local deploys/stacks.py --data ssh_user="$(id -un)" --data _sudo=false \
+uv run pyinfra "$HOME/.config/homelab/arcane-manager.py" tasks.stacks.apply \
+  --data _sudo=false \
   --data stack=arcane --serial --yes
 ```
 

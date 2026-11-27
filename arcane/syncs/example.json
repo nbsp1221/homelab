@@ -1,0 +1,10 @@
+[
+  {
+    "syncName": "example-service",
+    "gitRepo": "homelab",
+    "branch": "main",
+    "dockerComposePath": "stacks/example-service/compose.yaml",
+    "autoSync": false,
+    "syncInterval": 5
+  }
+]

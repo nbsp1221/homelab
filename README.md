@@ -6,8 +6,8 @@ This repository contains mostly independent Docker Compose stacks for self-hoste
 
 - [`stacks/`](stacks/) holds new stack definitions. Each stack starts with `README.md`, `.env.example`, and `compose.yaml`.
 - [`compose/`](compose/) holds existing stack definitions during the transition.
-- [`hosts/`](hosts/): which host runs an adopted stack and its non-secret host-specific values.
-- [`deploy/`](deploy/): manually invoked executors that apply those definitions.
+- [`pyinfra/`](pyinfra/): host inventory, Docker installation, and infrastructure operations.
+- [`arcane/syncs/`](arcane/syncs/): per-environment Arcane Git Pull configuration.
 
 ## Table of Contents
 
@@ -41,12 +41,12 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 
 ## Infrastructure Automation
 
-The [pyinfra executor](deploy/pyinfra/README.md) runs from a controller with SSH access to the managed hosts. It manages the GCP and OCI Linux baseline and can apply selected stacks assigned in [`hosts/`](hosts/). Run pyinfra explicitly when applying infrastructure changes.
+The [pyinfra executor](pyinfra/README.md) runs from a controller with SSH access to the managed hosts. It manages the GCP and OCI Linux baseline, provides a Docker-only entrypoint for the mini server, and applies infrastructure stacks assigned in inventory. Run pyinfra explicitly for host changes and use Arcane Git Pull for application updates.
 
 ## Testing
 
 - **Compose**. Run `pnpm install --frozen-lockfile` and `pnpm lint` from the repository root to check `compose/` and `stacks/`.
-- **pyinfra**. Follow the [pyinfra setup and validation commands](deploy/pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
+- **pyinfra**. Follow the [pyinfra setup and validation commands](pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
 - **RisuAI**. Check out the upstream revision pinned in the [Dockerfile](risuai/Dockerfile) and apply the repository's [patch series](risuai/patches/series) with [`apply-patches.sh`](risuai/patches/apply-patches.sh). Run the regression test against the patched checkout. It was verified with Node.js 24.
 
 ```bash

@@ -4,7 +4,7 @@ This stack provides an HTTPS reverse proxy for [Beszel Hub](../../stacks/beszel-
 
 ## Configuration and state
 
-The target host definition supplies `CADDY_DOMAIN` and the host's Tailscale IPv4 and IPv6 addresses through `CADDY_BIND_IPV4` and `CADDY_BIND_IPV6`. Only TCP 443 is published, bound to those addresses. Caddy obtains certificates via Cloudflare DNS-01. Set `CLOUDFLARE_API_TOKEN` in the deployed stack's local `.env` with Zone:Read and DNS:Edit permissions for the relevant zone. Keep the token outside Git.
+The controller's private `gcp_ingress.py` group data supplies `CADDY_DOMAIN` and the host's Tailscale IPv4 and IPv6 addresses through `CADDY_BIND_IPV4` and `CADDY_BIND_IPV6`. Only TCP 443 is published, bound to those addresses. Caddy obtains certificates via Cloudflare DNS-01. Set `CLOUDFLARE_API_TOKEN` in the deployed stack's local `.env` with Zone:Read and DNS:Edit permissions for the relevant zone. Keep the token outside Git.
 
 The project uses the [Cloudflare module maintainers' prebuilt image](https://github.com/caddy-dns/cloudflare/pkgs/container/cloudflare), `ghcr.io/caddy-dns/cloudflare:v0.2.4`, pinned by digest. This image contains Caddy `2.11.2`; the tag refers to the Cloudflare module version. Deployments pull the image without compiling Caddy.
 
@@ -12,14 +12,14 @@ Named volumes preserve certificate and ACME state under `/data` and Caddy runtim
 
 ## Deploy from the controller
 
-Run from `deploy/pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file.
+Run from `pyinfra`. For initial provisioning, an operator-provided private environment file can seed an absent remote `.env` using `--data stack_env_file=/absolute/path/to/private.env`. Existing remote environment files are preserved. Subsequent deployments use the host-local credential file.
 
 Preview and apply the Caddy stack. Replace `gcp-01` with your host's inventory name.
 
 ```bash
-uv run pyinfra inventories/production.py deploys/stacks.py \
+uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.stacks.apply \
   --limit gcp-01 --data stack=caddy-gcp --dry --serial
-uv run pyinfra inventories/production.py deploys/stacks.py \
+uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.stacks.apply \
   --limit gcp-01 --data stack=caddy-gcp --serial --yes
 ```
 

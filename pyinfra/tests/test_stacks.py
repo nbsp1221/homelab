@@ -54,6 +54,7 @@ with log.open("a") as stream:
         "project": project,
         "env_file": env_file,
         "value": os.getenv("VALUE"),
+        "path": os.getenv("PATH"),
     }) + "\\n")
 if operation == "config":
     assert path.parent.name.startswith(".deploy-")
@@ -92,6 +93,7 @@ def stack_case(tmp_path):
     running.write_text("old")
     tools = tmp_path / "bin"
     tools.mkdir()
+    (tmp_path / "compose-locks").mkdir()
     docker = tools / "docker"
     docker.write_text(DOCKER)
     docker.chmod(0o700)
@@ -104,7 +106,15 @@ def stack_case(tmp_path):
 def apply(stack_case, *, fail="", caddy="yes", foreign_directory="", value=""):
     project, stage, running, tools = stack_case
     return subprocess.run(
-        ["sh", str(SCRIPT), str(project), str(stage), "yes", caddy],
+        [
+            "sh",
+            str(SCRIPT),
+            str(project),
+            str(stage),
+            "yes",
+            caddy,
+            str(project.parent / "compose-locks"),
+        ],
         capture_output=True,
         text=True,
         timeout=10,
@@ -178,6 +188,37 @@ def test_busy_lock_prevents_concurrent_promotion(stack_case):
     assert not stage.exists()
 
 
+def test_busy_project_lock_blocks_apply_from_another_directory(stack_case):
+    project, stage, running, _ = stack_case
+    lock = project.parent / "compose-locks/example-project.lock"
+    with lock.open("w") as active:
+        fcntl.flock(active, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = apply(stack_case)
+    assert result.returncode != 0
+    assert "already running for project example-project" in result.stderr
+    assert [run["operation"] for run in invocations(project)] == ["config"]
+    assert (project / "compose.yaml").read_text() == "old"
+    assert running.read_text() == "old"
+    assert not stage.exists()
+
+
+def test_nonreplaceable_manifest_never_promotes_environment(stack_case):
+    project, stage, running, _ = stack_case
+    manifest = project / "compose.yaml"
+    manifest.unlink()
+    manifest.mkdir()
+    (stage / "managed.env").write_text(
+        '# BEGIN HOMELAB HOST VALUES\nVALUE="new"\n# END HOMELAB HOST VALUES\n'
+    )
+    result = apply(stack_case)
+    assert result.returncode != 0
+    assert "Compose cannot replace" in result.stderr
+    assert (project / ".env").read_text() == OLD_ENV
+    assert (project / "config/Caddyfile").read_text() == "old config"
+    assert running.read_text() == "old"
+    assert not stage.exists()
+
+
 def test_success_clears_managed_block_and_preserves_secrets(stack_case):
     project, stage, running, _ = stack_case
     result = apply(stack_case)
@@ -203,21 +244,38 @@ def test_bootstrap_environment_seed_with_existing_manifest(stack_case, existing)
     )
 
 
-def test_apply_and_validation_share_local_override_and_managed_values(stack_case):
+@pytest.mark.parametrize(
+    "filename", ["compose.override.yml", "docker-compose.override.yaml"]
+)
+def test_local_override_stops_before_docker_or_file_promotion(stack_case, filename):
+    project, stage, running, _ = stack_case
+    (project / filename).write_text("host-managed")
+    result = apply(stack_case)
+    assert result.returncode != 0
+    assert f"Compose override {project / filename} is unsupported" in result.stderr
+    assert not (project.parent / "docker.log").exists()
+    assert (project / "compose.yaml").read_text() == "old"
+    assert (project / ".env").read_text() == OLD_ENV
+    assert (project / filename).read_text() == "host-managed"
+    assert running.read_text() == "old"
+    assert not stage.exists()
+
+
+def test_managed_values_take_precedence_even_when_path_is_unset(stack_case):
     project, stage, _, _ = stack_case
-    override = project / "compose.override.yaml"
-    override.touch()
     (stage / "managed.env").write_text(
-        '# BEGIN HOMELAB HOST VALUES\nVALUE="inventory"\n# END HOMELAB HOST VALUES\n'
+        '# BEGIN HOMELAB HOST VALUES\nVALUE="inventory"\n'
+        'PATH="/container/bin"\n# END HOMELAB HOST VALUES\n'
     )
     result = apply(stack_case, caddy="no", value="inherited")
     assert result.returncode == 0, result.stderr
     candidate, active = invocations(project)
-    assert candidate["files"] == [str(stage / "compose.yaml"), str(override)]
-    assert active["files"] == [str(project / "compose.yaml"), str(override)]
     assert candidate["project"] == active["project"] == str(project)
-    assert (candidate["value"], active["value"]) == (None, None)
+    assert all(
+        run["value"] is None and run["path"] is None for run in (candidate, active)
+    )
     assert 'VALUE="inventory"' in (project / ".env").read_text()
+    assert 'PATH="/container/bin"' in (project / ".env").read_text()
 
 
 def test_fresh_caddy_config_directory_belongs_to_project_owner(stack_case):
@@ -308,10 +366,12 @@ def test_task_stages_only_declared_assets_and_uses_owner_home(
     monkeypatch.setattr(stacks.files, "put", put)
     monkeypatch.setattr(stacks.server, "script", script)
     stacks.apply._inner()
-    target, stage, requires_env, caddy = script.call_args.kwargs["args"]
+    target, stage, requires_env, caddy, lock_directory = script.call_args.kwargs["args"]
     assert target == f"/srv/{owner}/compose/arcane-agent"
     assert stage.startswith(f"{target}/.deploy-")
     assert (requires_env, caddy) == ("yes", "no")
+    lock_setup = directory.call_args_list[-1].kwargs
+    assert (lock_setup["path"], lock_setup["user"]) == (lock_directory, "root")
     target_directory = directory.call_args_list[0].kwargs
     assert (target_directory["user"], target_directory["group"]) == (
         owner,

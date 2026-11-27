@@ -12,6 +12,7 @@ from pyinfra.operations import files, server
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APPLY_SCRIPT = REPO_ROOT / "pyinfra/files/apply_stack.sh"
+COMPOSE_LOCK_DIRECTORY = "/run/homelab-compose"
 MANAGED_STACKS = frozenset({"arcane", "arcane-agent", "caddy-gcp"})
 CADDY_REQUIRED_VALUES = frozenset(
     {"CADDY_DOMAIN", "CADDY_BIND_IPV4", "CADDY_BIND_IPV6"}
@@ -155,6 +156,13 @@ def apply() -> None:
         mode="600",
         **ownership,
     )
+    files.directory(
+        name="Create host-wide Compose lock directory",
+        path=COMPOSE_LOCK_DIRECTORY,
+        user="root",
+        group="root",
+        mode="755",
+    )
     server.script(
         name=f"Validate and apply {selected}",
         src=str(APPLY_SCRIPT),
@@ -163,5 +171,6 @@ def apply() -> None:
             shlex.quote(stage),
             "yes" if (project / ".env.example").is_file() else "no",
             "yes" if caddy else "no",
+            COMPOSE_LOCK_DIRECTORY,
         ),
     )

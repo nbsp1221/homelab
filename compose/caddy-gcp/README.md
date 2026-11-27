@@ -14,19 +14,12 @@ Named volumes preserve certificate and ACME state under `/data` and Caddy runtim
 
 On the GCP host, copy `compose.yaml`, `.env.example` and `config/Caddyfile` into the stack's deployment directory. Reuse `/opt/stacks/caddy-gcp/` if the stack already runs there. For a fresh deployment, use a directory owned by the Docker-enabled operator, such as `~/compose/caddy-gcp/`, and set its mode to `0700`. Create `.env` from the example on first install and set its mode to `0600`. Preserve the existing `.env` when applying updates, including any values previously supplied through pyinfra.
 
-Run these commands from the deployment directory. Start Caddy before [Beszel Hub](../../stacks/beszel-hub/README.md) so their shared Docker network exists.
+Run these commands from the deployment directory for installs and updates. Start Caddy before [Beszel Hub](../../stacks/beszel-hub/README.md) so their shared Docker network exists. The last command loads the validated Caddyfile even when Compose keeps the existing container.
 
 ```sh
 docker compose config --quiet &&
   docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile &&
-  docker compose up -d --wait --wait-timeout 120
-```
-
-For a Caddyfile-only change on a running container, validate and reload in one step.
-
-```sh
-docker compose config --quiet &&
-  docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile &&
+  docker compose up -d --wait --wait-timeout 120 &&
   docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
@@ -49,10 +42,17 @@ domain=beszel.example.com
 ipv4=192.0.2.10
 ipv6=2001:db8::10
 
-curl --noproxy '*' --fail-early --fail --silent --show-error --write-out '\n' \
-  --resolve "$domain:443:$ipv4" "https://$domain/healthz" "https://$domain/api/health" &&
-curl --noproxy '*' --fail-early --fail --silent --show-error --write-out '\n' \
-  --resolve "$domain:443:[$ipv6]" "https://$domain/healthz" "https://$domain/api/health"
+probe() {
+  response=$(curl --noproxy '*' --silent --show-error --write-out '\n%{http_code}' \
+    --resolve "$domain:443:$1" "https://$domain$2") || return 1
+  printf '%s %s\n%s\n' "$1" "$2" "$response"
+  [[ ${response##*$'\n'} == 200 ]]
+}
+
+probe "$ipv4" /healthz &&
+  probe "$ipv4" /api/health &&
+  probe "[$ipv6]" /healthz &&
+  probe "[$ipv6]" /api/health
 ```
 
 The Hub health endpoint must return HTTP 200, and `/healthz` must return `gcp-caddy-ok`. Open the root URL to reach the Beszel UI.

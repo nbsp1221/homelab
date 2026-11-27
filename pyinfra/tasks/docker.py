@@ -1,14 +1,10 @@
-from collections.abc import Iterable
-from dataclasses import dataclass
-from io import BytesIO
 from shlex import join
-from urllib.request import urlopen
 
 from pyinfra import host
 from pyinfra.api import deploy
 from pyinfra.api.exceptions import DeployError
-from pyinfra.facts.deb import DebPackages
-from pyinfra.facts.server import Arch, LinuxDistribution, Users
+from pyinfra.facts.deb import DebArch
+from pyinfra.facts.server import LinuxDistribution, Users
 from pyinfra.operations import apt, files, server, systemd
 
 DOCKER_PACKAGES = (
@@ -18,134 +14,70 @@ DOCKER_PACKAGES = (
     "docker-buildx-plugin",
     "docker-compose-plugin",
 )
+DOCKER_KEY_DIR = "/etc/apt/keyrings"
+DOCKER_KEY_PATH = f"{DOCKER_KEY_DIR}/docker.asc"
+APT_NO_REMOVE = "--no-remove"
 APT_REFRESH = "apt-get -o APT::Update::Error-Mode=any update"
-DOCKER_KEY_PATH = "/etc/apt/keyrings/docker.asc"
-DOCKER_CONFLICTING_PACKAGES = frozenset(
-    {
-        "containerd",
-        "docker.io",
-        "docker-compose",
-        "docker-compose-v2",
-        "podman-docker",
-        "runc",
-    }
-)
-
-
-@dataclass(frozen=True, slots=True)
-class DockerRepository:
-    uri: str
-    key_uri: str
-    suite: str
-    architecture: str
-
-
-def docker_repository(
-    distribution: str,
-    release: str,
-    architecture: str,
-) -> DockerRepository:
-    distribution_slug = distribution.lower()
-    if distribution_slug not in {"debian", "ubuntu"}:
-        raise ValueError("Docker automation supports Debian and Ubuntu only")
-
-    architecture_slug = {
-        "x86_64": "amd64",
-        "aarch64": "arm64",
-    }.get(architecture, architecture)
-    uri = f"https://download.docker.com/linux/{distribution_slug}"
-    return DockerRepository(
-        uri=uri,
-        key_uri=f"{uri}/gpg",
-        suite=release,
-        architecture=architecture_slug,
-    )
-
-
-def installed_conflicts(installed_packages: Iterable[str]) -> tuple[str, ...]:
-    return tuple(sorted(DOCKER_CONFLICTING_PACKAGES & set(installed_packages)))
-
-
-def fetch_repository_key(url: str) -> BytesIO:
-    with urlopen(url, timeout=30) as response:
-        content = response.read()
-    if not content.startswith(b"-----BEGIN PGP PUBLIC KEY BLOCK-----"):
-        raise ValueError("Docker signing key is not an ASCII-armored OpenPGP key")
-    return BytesIO(content)
 
 
 @deploy("Configure Docker Engine")
 def install() -> None:
-    installed_packages = host.get_fact(DebPackages)
-    conflicts = installed_conflicts(installed_packages)
-    if conflicts:
+    distribution = host.get_fact(LinuxDistribution)
+    name = (distribution["name"] or "").lower()
+    if name not in {"debian", "ubuntu"}:
+        raise DeployError("Docker automation supports Debian and Ubuntu only")
+
+    release_meta = distribution["release_meta"]
+    release = release_meta.get("VERSION_CODENAME")
+    if name == "ubuntu":
+        release = release_meta.get("UBUNTU_CODENAME") or release
+    architecture = host.get_fact(DebArch)
+    if not release or not architecture:
         raise DeployError(
-            "Conflicting Docker packages are installed: " + ", ".join(conflicts)
+            "Could not determine distribution release or APT architecture"
         )
 
     operators = tuple(host.data.get("docker_users", ()))
     if operators:
-        users = host.get_fact(Users)
-        missing = sorted(set(operators) - set(users))
+        missing = sorted(set(operators) - set(host.get_fact(Users)))
         if missing:
             raise DeployError(
                 "Docker operators must already exist: " + ", ".join(missing)
             )
 
-    distribution = host.get_fact(LinuxDistribution)
-    name = distribution["name"]
-    release_meta = distribution["release_meta"]
-    release = release_meta.get("VERSION_CODENAME") or release_meta.get(
-        "UBUNTU_CODENAME"
+    repository = f"https://download.docker.com/linux/{name}"
+    apt.packages(
+        name="Install Docker repository prerequisites",
+        packages=["ca-certificates", "curl"],
+        update=True,
+        cache_time=3600,
+        extra_install_args=APT_NO_REMOVE,
     )
-    architecture = host.get_fact(Arch)
-    if not name or not release or not architecture:
-        raise DeployError("Could not determine distribution, release, or architecture")
-
-    try:
-        repository = docker_repository(name, release, architecture)
-    except ValueError as error:
-        raise DeployError(str(error)) from error
-
-    try:
-        signing_key = fetch_repository_key(repository.key_uri)
-    except (OSError, ValueError) as error:
-        raise DeployError(f"Could not fetch Docker signing key: {error}") from error
-
-    if "ca-certificates" not in installed_packages:
-        apt.packages(
-            name="Install CA certificates for the Docker repository",
-            packages=["ca-certificates"],
-            update=True,
-            cache_time=3600,
-        )
-
-    key_result = files.put(
-        name="Install Docker's APT signing key",
-        src=signing_key,
+    files.directory(
+        name="Create APT keyring directory",
+        path=DOCKER_KEY_DIR,
+        mode="0755",
+    )
+    files.download(
+        name="Download Docker's APT signing key",
+        src=f"{repository}/gpg",
         dest=DOCKER_KEY_PATH,
         mode="0644",
     )
-    repository_result = apt.sources_file(
+    apt.sources_file(
         name="Configure Docker's official APT repository",
         filename="docker",
-        uris=[repository.uri],
-        suites=[repository.suite],
+        uris=[repository],
+        suites=[release],
         components=["stable"],
-        architectures=[repository.architecture],
+        architectures=[architecture],
         signed_by=DOCKER_KEY_PATH,
     )
-    if (
-        key_result.will_change
-        or repository_result.will_change
-        or not set(DOCKER_PACKAGES).issubset(installed_packages)
-    ):
-        server.shell(name="Refresh Docker repository metadata", commands=APT_REFRESH)
-
     apt.packages(
-        name="Install current Docker Engine and Compose",
+        name="Install Docker Engine and Compose",
         packages=list(DOCKER_PACKAGES),
-        present=True,
+        update=True,
+        extra_install_args=APT_NO_REMOVE,
     )
     systemd.service(
         name="Enable and start Docker Engine",
@@ -181,7 +113,8 @@ for package in {packages}; do
     set -- "$@" "$package"
 done
 if [ "$#" -gt 0 ]; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade "$@"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y --only-upgrade {APT_NO_REMOVE} "$@"
 fi
 """
 

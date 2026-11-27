@@ -58,3 +58,34 @@ def test_private_group_data_supplies_host_configuration(tmp_path):
     assert data["dns_probe_names"] == ["dns.example"]
     assert data["docker_users"] == ["docker-operator"]
     assert "ssh_user" not in data and "ssh_key" not in data
+
+
+def test_cloud_baseline_leaves_mini_target_untouched(tmp_path):
+    inventory = tmp_path / "inventory.py"
+    inventory.write_text(
+        'cloud = ["@fake/cloud"]\n'
+        'mini = [("@fake/mini", {"fake_delay": 0, "fake_delay_jitter": 0})]\n'
+    )
+    result = subprocess.run(
+        [
+            str(Path(sys.executable).with_name("pyinfra")),
+            str(inventory),
+            "deploy.py",
+            "--limit",
+            "mini",
+            "--dry",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    output = result.stdout + result.stderr
+    connected = {
+        line.split()[0] for line in output.splitlines() if line.endswith("Connected")
+    }
+    assert connected == {"[@fake/mini]"}
+    assert "Detected changes" in output
+    assert "Configure baseline packages" not in output
+    assert "Configure swap file" not in output
+    assert "Configure Docker Engine" not in output

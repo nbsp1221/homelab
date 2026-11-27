@@ -72,10 +72,9 @@ jobs:
         working-directory: pyinfra
         run: >-
           uv run python -m compileall -q
-          deploy.py group_data inventories tasks tests
+          deploy.py inventory.py group_data tasks tests
 
       - name: Validate inventory
         working-directory: pyinfra
         run: |
-          uv run pyinfra inventories/cloud.py debug-inventory >/dev/null 2>&1
-          uv run pyinfra inventories/mini.py debug-inventory >/dev/null 2>&1
+          uv run pyinfra inventory.py debug-inventory >/dev/null 2>&1

@@ -23,7 +23,7 @@ The target must already have enabled Tailscale and systemd-resolved services, th
 From `pyinfra`, replace both aliases with the controller's configured names.
 
 ```bash
-uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.dns.configure_dns \
+uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventory.py tasks.dns.configure_dns \
   --limit gcp-01 \
   --data ssh_hostname=gcp-01-iap --dry --serial
 ```
@@ -39,7 +39,7 @@ An error or handled termination signal triggers an attempt to restore both previ
 Run the independent read-only DNS check.
 
 ```bash
-uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventories/cloud.py tasks.dns.verify_dns \
+uv run pyinfra --group-data "$HOME/.config/homelab/group_data" inventory.py tasks.dns.verify_dns \
   --limit gcp-01 --serial --yes
 ```
 

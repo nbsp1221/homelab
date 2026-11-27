@@ -35,9 +35,8 @@ Run commands from this directory:
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
-uv run python -m compileall -q deploy.py group_data inventories tasks tests
-uv run pyinfra inventories/cloud.py debug-inventory
-uv run pyinfra inventories/mini.py debug-inventory
+uv run python -m compileall -q deploy.py inventory.py group_data tasks tests
+uv run pyinfra inventory.py debug-inventory
 ```
 
 ## Operation
@@ -60,37 +59,36 @@ Replace `gcp-01` in the examples with the inventory alias. Supply the controller
 
 ```bash
 group_data="$HOME/.config/homelab/group_data"
-uv run pyinfra --group-data "$group_data" inventories/cloud.py debug-inventory \
-  --limit gcp-01
+uv run pyinfra --group-data "$group_data" inventory.py debug-inventory
 ```
 
 Audit without changing host configuration:
 
 ```bash
-uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.audit.run \
+uv run pyinfra --group-data "$group_data" inventory.py tasks.audit.run \
   --limit gcp-01 --serial --yes
 ```
 
-Preview the baseline against one host:
+Use `--limit cloud` to select the cloud hosts or a host alias to select just one. The baseline applies only to members of the `cloud` group.
 
 ```bash
-uv run pyinfra --group-data "$group_data" inventories/cloud.py deploy.py \
+uv run pyinfra --group-data "$group_data" inventory.py deploy.py \
   --limit gcp-01 --dry --diff --serial
 ```
 
 Apply the baseline.
 
 ```bash
-uv run pyinfra --group-data "$group_data" inventories/cloud.py deploy.py \
+uv run pyinfra --group-data "$group_data" inventory.py deploy.py \
   --limit gcp-01 --serial --yes
 ```
 
 Upgrade installed Docker packages or run general OS package maintenance:
 
 ```bash
-uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.docker.upgrade \
+uv run pyinfra --group-data "$group_data" inventory.py tasks.docker.upgrade \
   --limit gcp-01 --serial --dry
-uv run pyinfra --group-data "$group_data" inventories/cloud.py tasks.maintenance.run \
+uv run pyinfra --group-data "$group_data" inventory.py tasks.maintenance.run \
   --limit gcp-01 --serial --yes
 ```
 
@@ -101,8 +99,8 @@ GCP DNS changes are a separate [IAP-guarded procedure](DNS.md). The baseline app
 Load the client key in the controller's SSH agent or select it in the alias's SSH configuration.
 
 ```bash
-uv run --locked pyinfra --group-data "$group_data" inventories/mini.py \
-  tasks.docker.install --dry
+uv run --locked pyinfra --group-data "$group_data" inventory.py tasks.docker.install \
+  --limit mini --dry
 ```
 
 On hosts with password-protected sudo, add `--data _sudo=false` to plan using unprivileged facts. Use this override only for a preview. The Docker install task configures the repository and service and ensures the package set is present. Use `tasks.docker.upgrade` to refresh metadata and upgrade installed, unheld Docker packages. General package maintenance can also upgrade Docker during an explicit OS upgrade. Docker install applies strict APT refresh behavior to its own invocation. A drop-in created by an earlier release remains under the operator's control.
@@ -111,7 +109,7 @@ Deploy and recover [Caddy](../compose/caddy-gcp/README.md), [Arcane Manager](../
 
 ## Project layout
 
-- `inventories/` contains the cloud and mini targets with any host-specific data.
+- `inventory.py` defines the hosts and groups. `cloud` combines GCP and OCI, and `mini` selects the mini server.
 - `group_data/` holds common policy defaults. The controller supplies private group data and SSH settings.
 - `deploy.py` composes the baseline. Run a single task by its dotted name.
 - `tasks/` holds the reusable Python implementation and its helpers.

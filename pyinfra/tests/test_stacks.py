@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -93,7 +94,7 @@ def stack_case(tmp_path):
     running.write_text("old")
     tools = tmp_path / "bin"
     tools.mkdir()
-    (tmp_path / "compose-locks").mkdir()
+    (tmp_path / "compose-locks").mkdir(mode=0o555)
     docker = tools / "docker"
     docker.write_text(DOCKER)
     docker.chmod(0o700)
@@ -176,30 +177,99 @@ def test_same_project_in_another_directory_is_left_running(stack_case):
     assert not stage.exists()
 
 
-def test_busy_lock_prevents_concurrent_promotion(stack_case):
+def test_busy_read_only_host_lock_blocks_concurrent_promotion(stack_case):
     project, stage, running, _ = stack_case
-    with (project / ".deploy.lock").open("w") as lock:
+    directory = project.parent / "compose-locks"
+    lock = os.open(directory, os.O_RDONLY)
+    try:
         fcntl.flock(lock, fcntl.LOCK_EX)
         result = apply(stack_case)
+    finally:
+        os.close(lock)
     assert result.returncode != 0
-    assert "already running" in result.stderr
+    assert "already running on this host" in result.stderr
+    assert not (project.parent / "docker.log").exists()
     assert (project / "compose.yaml").read_text() == "old"
     assert running.read_text() == "old"
     assert not stage.exists()
+    assert not list(directory.iterdir())
 
 
-def test_busy_project_lock_blocks_apply_from_another_directory(stack_case):
-    project, stage, running, _ = stack_case
-    lock = project.parent / "compose-locks/example-project.lock"
-    with lock.open("w") as active:
-        fcntl.flock(active, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        result = apply(stack_case)
-    assert result.returncode != 0
-    assert "already running for project example-project" in result.stderr
-    assert [run["operation"] for run in invocations(project)] == ["config"]
-    assert (project / "compose.yaml").read_text() == "old"
-    assert running.read_text() == "old"
-    assert not stage.exists()
+@pytest.mark.skipif(os.geteuid() == 0, reason="requires an unprivileged operator")
+def test_manager_bootstrap_without_sudo_needs_no_writable_host_lock(stack_case):
+    fixture, _, running, tools = stack_case
+    root = fixture.parent
+    home = root / "home"
+    target = home / "compose/arcane"
+    source = root / "stacks/arcane"
+    source.mkdir(parents=True)
+    (source / "compose.yaml").write_text("new")
+    (source / ".env.example").touch()
+    inventory = root / "manager.py"
+    inventory.write_text(
+        'manager = [("@local", {"stacks": {"arcane": {"bootstrap": True}}})]\n'
+    )
+    seed = root / "seed.env"
+    seed.write_text("SECRET=fixture\n")
+    seed.chmod(0o600)
+    running.unlink()
+    lock_directory = root / "compose-locks"
+    launcher = """\
+import os
+import shlex
+from pathlib import Path
+
+from pyinfra.api import StringCommand
+from pyinfra.facts.server import Home
+from pyinfra_cli.main import main
+from tasks import stacks
+
+root = Path(os.environ["FIXTURE_ROOT"])
+stacks.REPO_ROOT = root
+stacks.COMPOSE_LOCK_DIRECTORY = str(root / "compose-locks")
+
+# Redirect only the login's home so the real CLI cannot touch active stacks.
+def fixture_home(self, user=""):
+    return StringCommand("echo " + shlex.quote(str(root / "home")))
+
+Home.command = fixture_home
+main()
+"""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            launcher,
+            str(inventory),
+            "tasks.stacks.apply",
+            "--data",
+            "_sudo=false",
+            "--data",
+            "stack=arcane",
+            "--data",
+            f"stack_env_file={seed}",
+            "--serial",
+            "--yes",
+        ],
+        cwd=SCRIPT.parents[1],
+        env={
+            **os.environ,
+            "FIXTURE_ROOT": str(root),
+            "PATH": f"{tools}:{os.environ['PATH']}",
+            "RUNNING": str(running),
+            "DOCKER_LOG": str(root / "docker.log"),
+            "FAIL": "",
+            "PROJECT_DIRECTORY": str(target),
+            "FOREIGN_DIRECTORY": "",
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (target / ".env").read_text() == seed.read_text()
+    assert running.read_text() == "new"
+    assert not list(lock_directory.iterdir())
 
 
 def test_nonreplaceable_manifest_never_promotes_environment(stack_case):
@@ -370,8 +440,9 @@ def test_task_stages_only_declared_assets_and_uses_owner_home(
     assert target == f"/srv/{owner}/compose/arcane-agent"
     assert stage.startswith(f"{target}/.deploy-")
     assert (requires_env, caddy) == ("yes", "no")
-    lock_setup = directory.call_args_list[-1].kwargs
-    assert (lock_setup["path"], lock_setup["user"]) == (lock_directory, "root")
+    assert all(
+        call.kwargs["path"] != lock_directory for call in directory.call_args_list
+    )
     target_directory = directory.call_args_list[0].kwargs
     assert (target_directory["user"], target_directory["group"]) == (
         owner,

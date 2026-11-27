@@ -43,7 +43,7 @@ reload_caddy() {
     return 1
 }
 
-# Each run uploads into a private directory before acquiring the project lock.
+# Each run uploads into a private directory before acquiring the host lock.
 # Validate its shape before registering cleanup.
 case "$stage" in
     "$target"/.deploy-*) [ "$(dirname -- "$stage")" = "$target" ] || exit 1 ;;
@@ -54,9 +54,10 @@ trap 'rm -rf -- "$stage"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
-exec 9>"$target/.deploy.lock"
+# A read-only handle on the existing host directory also works without sudo.
+exec 9<"$lock_directory"
 if ! flock -n 9; then
-    printf 'Another Compose deploy is already running for %s\n' "$target" >&2
+    printf 'Another pyinfra Compose deploy is already running on this host.\n' >&2
     exit 1
 fi
 
@@ -153,14 +154,6 @@ case "$project" in
         exit 1
         ;;
 esac
-# The directory lock protects files. This host-wide lock protects the Docker
-# project identity even when two invocations use different directories.
-exec 8>"$lock_directory/$project.lock"
-if ! flock -n 8; then
-    printf 'Another Compose deploy is already running for project %s\n' "$project" >&2
-    exit 1
-fi
-
 canonical_target=$(realpath -e -- "$target")
 containers=$(run_docker ps -a --filter "label=com.docker.compose.project=$project" \
     --format '{{.ID}}|{{.Label "com.docker.compose.project.working_dir"}}|{{.Label "com.docker.compose.oneoff"}}')

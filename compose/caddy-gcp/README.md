@@ -12,7 +12,7 @@ Named volumes preserve certificate and ACME state under `/data` and Caddy runtim
 
 ## Install and recover
 
-On the GCP host, copy `compose.yaml`, `.env.example` and `config/Caddyfile` into the stack's deployment directory. Reuse `/opt/stacks/caddy-gcp/` if the stack already runs there. For a fresh deployment, use a directory owned by the Docker-enabled operator, such as `~/compose/caddy-gcp/`, and set its mode to `0700`. Create `.env` from the example on first install and set its mode to `0600`. Preserve the existing `.env` when applying updates, including any values previously supplied through pyinfra.
+On the GCP host, copy `compose.yaml`, `.env.example` and `config/Caddyfile` into the stack's deployment directory. For an existing stack, reuse its deployment directory and original Compose project name. For a fresh deployment, use a directory owned by the Docker-enabled operator, such as `~/compose/caddy-gcp/`, and set its mode to `0700`. Create `.env` from the example on first install and set its mode to `0600`. Preserve the existing `.env` when applying updates, including any values previously supplied through pyinfra.
 
 Run these commands from the deployment directory for installs and updates. Start Caddy before [Beszel Hub](../../stacks/beszel-hub/README.md) so their shared Docker network exists. The last command loads the validated Caddyfile even when Compose keeps the existing container.
 

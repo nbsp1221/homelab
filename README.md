@@ -33,7 +33,9 @@ This repository contains mostly independent Docker Compose stacks for self-hoste
 Most maintained stacks attach to an external Docker network named `caddy-network`
 so a reverse proxy can route traffic to them without exposing ports on the host.
 
-One time setup:
+If you use this repository's [Caddy stack](compose/caddy-gcp/README.md#install-and-recover), start it first. Its Compose project creates and owns the network.
+
+For a separately managed reverse proxy, create the network once if needed:
 
 ```bash
 docker network inspect caddy-network >/dev/null 2>&1 || docker network create caddy-network

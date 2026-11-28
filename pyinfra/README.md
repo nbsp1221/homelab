@@ -5,7 +5,6 @@ This executor applies the selected configuration to managed Linux hosts. Run pyi
 ## Scope
 
 - Audit existing Debian and Ubuntu hosts.
-- Install the small package set required by the baseline.
 - Maintain a 2 GiB disk-backed swap file.
 - Install current Docker Engine and Docker Compose from Docker's official
   repository.
@@ -92,7 +91,7 @@ uv run pyinfra --group-data "$group_data" inventory.py tasks.maintenance.run \
   --limit gcp-01 --serial --yes
 ```
 
-GCP DNS changes are a separate [IAP-guarded procedure](DNS.md). The baseline applies prerequisites, swap, and Docker installation.
+GCP DNS changes are a separate [IAP-guarded procedure](DNS.md). The baseline configures swap and installs Docker with its prerequisites.
 
 ### Preview Docker on the mini server
 

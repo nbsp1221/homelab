@@ -35,7 +35,7 @@ so a reverse proxy can route traffic to them without exposing ports on the host.
 
 If you use this repository's [Caddy stack](compose/caddy-gcp/README.md#install-and-recover), start it first. Its Compose project creates and owns the network.
 
-For a separately managed reverse proxy, create the network once if needed:
+On other hosts, create the network once before starting a stack that requires it. This also applies if you run without a reverse proxy.
 
 ```bash
 docker network inspect caddy-network >/dev/null 2>&1 || docker network create caddy-network

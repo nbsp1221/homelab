@@ -6,8 +6,8 @@ This repository contains mostly independent Docker Compose stacks for self-hoste
 
 - [`stacks/`](stacks/) holds new stack definitions. Each stack starts with `README.md`, `.env.example`, and `compose.yaml`.
 - [`compose/`](compose/) holds existing stack definitions during the transition.
-- [`hosts/`](hosts/): which host runs an adopted stack and its non-secret host-specific values.
-- [`deploy/`](deploy/): manually invoked executors that apply those definitions.
+- [`pyinfra/`](pyinfra/): host inventory, Docker installation, and infrastructure operations.
+- [`arcane/syncs/`](arcane/syncs/): per-environment Arcane Git Pull configuration.
 
 ## Table of Contents
 
@@ -33,7 +33,9 @@ This repository contains mostly independent Docker Compose stacks for self-hoste
 Most maintained stacks attach to an external Docker network named `caddy-network`
 so a reverse proxy can route traffic to them without exposing ports on the host.
 
-One time setup:
+If you use this repository's [Caddy stack](compose/caddy-gcp/README.md#install-and-recover), start it first. Its Compose project creates and owns the network.
+
+On other hosts, create the network once before starting a stack that requires it. This also applies if you run without a reverse proxy.
 
 ```bash
 docker network inspect caddy-network >/dev/null 2>&1 || docker network create caddy-network
@@ -41,12 +43,12 @@ docker network inspect caddy-network >/dev/null 2>&1 || docker network create ca
 
 ## Infrastructure Automation
 
-The [pyinfra executor](deploy/pyinfra/README.md) runs from a controller with SSH access to the managed hosts. It manages the GCP and OCI Linux baseline and can apply selected stacks assigned in [`hosts/`](hosts/). Run pyinfra explicitly when applying infrastructure changes.
+Run [pyinfra](pyinfra/README.md) from a controller with SSH access to configure the GCP and OCI Linux baseline or install Docker on the mini server. Use the Compose procedures for [Caddy](compose/caddy-gcp/README.md), [Arcane Manager](stacks/arcane/README.md), and [Arcane Agent](stacks/arcane-agent/README.md). Use [Arcane Git Pull](arcane/syncs/README.md) for routine application updates.
 
 ## Testing
 
 - **Compose**. Run `pnpm install --frozen-lockfile` and `pnpm lint` from the repository root to check `compose/` and `stacks/`.
-- **pyinfra**. Follow the [pyinfra setup and validation commands](deploy/pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
+- **pyinfra**. Follow the [pyinfra setup and validation commands](pyinfra/README.md#validation). The test suite uses synthetic fixtures and runs locally. The separate inventory check validates the repository's deployment configuration.
 - **RisuAI**. Check out the upstream revision pinned in the [Dockerfile](risuai/Dockerfile) and apply the repository's [patch series](risuai/patches/series) with [`apply-patches.sh`](risuai/patches/apply-patches.sh). Run the regression test against the patched checkout. It was verified with Node.js 24.
 
 ```bash

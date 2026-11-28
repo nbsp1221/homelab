@@ -70,11 +70,12 @@ def install() -> None:
     repository = f"https://download.docker.com/linux/{name}"
     if not set(DOCKER_PREREQUISITES).issubset(installed):
         apt.packages(
-            name="Install Docker repository prerequisites",
+            name="Refresh APT indexes and install missing Docker prerequisites",
             packages=list(DOCKER_PREREQUISITES),
             update=True,
             extra_install_args=APT_NO_REMOVE,
         )
+
     files.directory(
         name="Create APT keyring directory",
         path=DOCKER_KEY_DIR,
@@ -83,6 +84,10 @@ def install() -> None:
         mode="0755",
     )
     key = host.get_fact(File, path=DOCKER_KEY_PATH)
+    # A missing key is downloaded even without a forced refresh.
+    redownload_signing_key = not set(DOCKER_PACKAGES).issubset(installed) or bool(
+        key and key["user"] != "root"
+    )
     files.download(
         name="Download Docker's APT signing key",
         src=f"{repository}/gpg",
@@ -90,12 +95,10 @@ def install() -> None:
         user="root",
         group="root",
         mode="0644",
-        force=(
-            not set(DOCKER_PACKAGES).issubset(installed)
-            or bool(key and key["user"] != "root")
-        ),
+        force=redownload_signing_key,
         extra_curl_args={"--max-time": "30"},
     )
+
     apt.sources_file(
         name="Configure Docker's official APT repository",
         filename="docker",
@@ -105,12 +108,14 @@ def install() -> None:
         architectures=[architecture],
         signed_by=DOCKER_KEY_PATH,
     )
+
     apt.packages(
-        name="Install Docker Engine and Compose",
+        name="Refresh APT indexes and install missing Docker packages",
         packages=list(DOCKER_PACKAGES),
         update=True,
         extra_install_args=APT_NO_REMOVE,
     )
+
     systemd.service(
         name="Enable and start Docker Engine",
         service="docker",

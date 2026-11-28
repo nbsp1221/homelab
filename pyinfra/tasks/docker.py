@@ -4,6 +4,7 @@ from pyinfra import host
 from pyinfra.api import deploy
 from pyinfra.api.exceptions import DeployError
 from pyinfra.facts.deb import DebArch, DebPackages
+from pyinfra.facts.files import File
 from pyinfra.facts.server import LinuxDistribution, Users
 from pyinfra.operations import apt, files, server, systemd
 
@@ -77,14 +78,22 @@ def install() -> None:
     files.directory(
         name="Create APT keyring directory",
         path=DOCKER_KEY_DIR,
+        user="root",
+        group="root",
         mode="0755",
     )
+    key = host.get_fact(File, path=DOCKER_KEY_PATH)
     files.download(
         name="Download Docker's APT signing key",
         src=f"{repository}/gpg",
         dest=DOCKER_KEY_PATH,
+        user="root",
+        group="root",
         mode="0644",
-        force=not set(DOCKER_PACKAGES).issubset(installed),
+        force=(
+            not set(DOCKER_PACKAGES).issubset(installed)
+            or bool(key and key["user"] != "root")
+        ),
         extra_curl_args={"--max-time": "30"},
     )
     apt.sources_file(

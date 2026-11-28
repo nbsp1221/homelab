@@ -56,9 +56,12 @@ def test_install_uses_the_official_apt_source_without_package_removals(
         docker.LinuxDistribution: {"name": distribution, "release_meta": release_meta},
         docker.DebArch: architecture,
         docker.DebPackages: {},
+        docker.File: None,
     }
     monkeypatch.setattr(
-        docker, "host", SimpleNamespace(data={}, get_fact=facts.__getitem__)
+        docker,
+        "host",
+        SimpleNamespace(data={}, get_fact=lambda fact, **kwargs: facts[fact]),
     )
     packages, source, download = Mock(), Mock(), Mock()
     monkeypatch.setattr(docker.apt, "packages", packages)
@@ -97,7 +100,9 @@ def test_install_rejects_distribution_compose_before_any_apt_operation(monkeypat
         docker.DebPackages: {"docker-compose-v2": ["2.40.3"]},
     }
     monkeypatch.setattr(
-        docker, "host", SimpleNamespace(data={}, get_fact=facts.__getitem__)
+        docker,
+        "host",
+        SimpleNamespace(data={}, get_fact=lambda fact, **kwargs: facts[fact]),
     )
     packages, download = Mock(), Mock()
     monkeypatch.setattr(docker.apt, "packages", packages)
@@ -110,8 +115,13 @@ def test_install_rejects_distribution_compose_before_any_apt_operation(monkeypat
     download.assert_not_called()
 
 
-@pytest.mark.parametrize("missing_compose", [False, True])
-def test_reapply_downloads_the_key_only_when_needed(monkeypatch, missing_compose):
+@pytest.mark.parametrize(
+    ("missing_compose", "key_owner", "force_download"),
+    [(False, "root", False), (True, "root", True), (False, "operator", True)],
+)
+def test_reapply_downloads_the_key_only_when_needed(
+    monkeypatch, missing_compose, key_owner, force_download
+):
     installed = {
         package: ["1"]
         for package in (*docker.DOCKER_PACKAGES, *docker.DOCKER_PREREQUISITES)
@@ -125,9 +135,12 @@ def test_reapply_downloads_the_key_only_when_needed(monkeypatch, missing_compose
         },
         docker.DebArch: "amd64",
         docker.DebPackages: installed,
+        docker.File: {"user": key_owner},
     }
     monkeypatch.setattr(
-        docker, "host", SimpleNamespace(data={}, get_fact=facts.__getitem__)
+        docker,
+        "host",
+        SimpleNamespace(data={}, get_fact=lambda fact, **kwargs: facts[fact]),
     )
     packages, download = Mock(), Mock()
     monkeypatch.setattr(docker.apt, "packages", packages)
@@ -139,4 +152,6 @@ def test_reapply_downloads_the_key_only_when_needed(monkeypatch, missing_compose
     docker.install._inner()
 
     assert packages.call_count == 1
-    assert download.call_args.kwargs["force"] is missing_compose
+    assert download.call_args.kwargs["force"] is force_download
+    assert download.call_args.kwargs["user"] == "root"
+    assert download.call_args.kwargs["group"] == "root"
